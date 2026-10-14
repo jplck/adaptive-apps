@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw';
-import { Agent, AgentVersion, getAgent, getEnvironment, listAgents, listAgentVersions } from '../api/client';
+import { Agent, AgentListEntry, AgentVersion, getAgent, getEnvironment, listAgents, listAgentVersions } from '../api/client';
 import { server } from '../mocks/server';
 
 const agent: Agent = {
@@ -32,7 +32,7 @@ const versions: AgentVersion[] = [
 it('uses direct operational records and exact native URLs without environment lookup or pagination', async () => {
   const paths: string[] = [];
   let environmentCalls = 0;
-  const record = (request: Request, body: Agent | { object: 'list'; data: Agent[] | AgentVersion[] }) => {
+  const record = (request: Request, body: Agent | { object: 'list'; data: AgentListEntry[] | AgentVersion[] }) => {
     const url = new URL(request.url);
     paths.push(url.pathname);
     expect(url.search).toBe('');
@@ -43,12 +43,12 @@ it('uses direct operational records and exact native URLs without environment lo
       environmentCalls += 1;
       return new HttpResponse(null, { status: 503 });
     }),
-    http.get('*/v1/agents', ({ request }) => record(request, { object: 'list', data: [agent] })),
+    http.get('*/v1/agents', ({ request }) => record(request, { object: 'list', data: [{ ...agent, releases: versions }] })),
     http.get('*/v1/agents/writer', ({ request }) => record(request, agent)),
     http.get('*/v1/agents/writer/versions/retained', ({ request }) => record(request, retained)),
     http.get('*/v1/agents/writer/versions', ({ request }) => record(request, { object: 'list', data: versions })),
   );
-  expect(await listAgents()).toEqual([agent]);
+  expect(await listAgents()).toEqual([{ ...agent, releases: versions }]);
   expect(await getAgent('writer')).toEqual(agent);
   expect(await getAgent('writer', 'retained')).toEqual(retained);
   expect(await listAgentVersions('writer')).toEqual(versions);
@@ -69,7 +69,9 @@ it('encodes names and opaque release IDs as path segments', async () => {
 });
 
 const inventoryReads = [
-  ['/v1/agents', listAgents, [{ object: 'list' }, { object: 'list', data: [{}] }]],
+  ['/v1/agents', listAgents, [{ object: 'list' }, { object: 'list', data: [{}] },
+    { object: 'list', data: [agent] },
+    { object: 'list', data: [{ ...agent, releases: [{ ...versions[0], status: 'Ready' }] }] }]],
   ['/v1/agents/writer', () => getAgent('writer'), [{}, { ...agent, endpoint: 42 }, { adaptive: agent }]],
   ['/v1/agents/writer/versions/retained', () => getAgent('writer', 'retained'),
     [{}, { ...retained, phase: 'Unknown' }, { adaptive: retained }]],

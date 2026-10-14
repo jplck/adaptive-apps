@@ -7,19 +7,20 @@ import { renderWithProviders } from './testUtils';
 
 describe('AgentsList', () => {
   it('renders native active fields and metadata without inferring readiness from release inventory', async () => {
+    const versions = vi.fn(() => new HttpResponse(null, { status: 500 }));
     server.use(
       http.get('*/v1/agents', () => HttpResponse.json({ object: 'list', data: [{
         name: 'native-agent', type: 'prompt', version: 'effective',
         requestedActiveVersion: 'candidate', activeVersion: 'effective', endpoint: null,
-        phase: 'Pending', created: 0, description: 'Captured description',
+        phase: 'Pending', created: 0, description: 'Captured description', releases: [{
+          name: 'native-agent', version: 'candidate', status: 'Available',
+          endpoint: '/agents/native-agent/versions/candidate/responses',
+          definitionDigest: 'digest', requestedActive: true, active: false,
+        }],
       }] })),
-      http.get('*/v1/agents/native-agent/versions', () => HttpResponse.json({ object: 'list', data: [{
-        name: 'native-agent', version: 'candidate', status: 'Available',
-        endpoint: '/agents/native-agent/versions/candidate/responses',
-        definitionDigest: 'digest', requestedActive: true, active: false,
-      }] })),
+      http.get('*/v1/agents/native-agent/versions', versions),
     );
-    renderWithProviders(<AgentsList />, { route: '/agents' });
+    const { queryClient } = renderWithProviders(<AgentsList />, { route: '/agents' });
     const row = (await screen.findByText('native-agent')).closest<HTMLElement>('[role="row"]')!;
     expect(await within(row).findByText('candidate · Available')).toBeInTheDocument();
     expect(within(row).getByText('Pending')).toBeInTheDocument();
@@ -28,16 +29,20 @@ describe('AgentsList', () => {
     expect(within(row).getByText('Captured description')).toBeInTheDocument();
     expect(within(row).queryByText('—')).not.toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Active readiness' })).toBeInTheDocument();
+    expect(versions).not.toHaveBeenCalled();
+    expect(queryClient.getQueryData(['agent-versions', 'native-agent'])).toMatchObject([
+      { version: 'candidate', status: 'Available' },
+    ]);
   });
 
   it('shows immutable release readiness even when no active version is projected', async () => {
     server.use(
       http.get('*/v1/agents', () => HttpResponse.json({ object: 'list', data: [{
         name: 'demo', type: 'prompt', version: null, requestedActiveVersion: null, activeVersion: null, endpoint: null,
-      }] })),
-      http.get('*/v1/agents/demo/versions', () => HttpResponse.json({ object: 'list', data: [{
-        name: 'demo', version: 'candidate', status: 'Available', endpoint: '/agents/demo/versions/candidate/responses',
-        definitionDigest: null, requestedActive: false, active: false,
+        releases: [{
+          name: 'demo', version: 'candidate', status: 'Available', endpoint: '/agents/demo/versions/candidate/responses',
+          definitionDigest: null, requestedActive: false, active: false,
+        }],
       }] })),
     );
     renderWithProviders(<AgentsList />, { route: '/agents' });

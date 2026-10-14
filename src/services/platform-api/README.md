@@ -9,6 +9,12 @@ inventory or inference proxy.
 records; missing selections never fall back. Guardrails are read-only retained
 policy views. Monitor streams bounded native Jaeger/Loki records through
 authenticated fetch, without forwarding browser tokens to stores.
+Inventory operations share fresh namespace resource lists within one request,
+with a second ConfigMap list verifying captures and identity ownership.
+Complete inventory needs nine Kubernetes LISTs, independent of retained release
+count; exact selection qualifies only the selected and requested-active runtimes.
+Agent-list responses include release summaries, avoiding per-row UI requests.
+No inventory cache persists across requests or Monitor polling operations.
 `GET/PATCH /v1/connectivity-fault` reads/patches only the exact existing demo
 NetworkPolicy; no workload or identity mutation is authorized.
 

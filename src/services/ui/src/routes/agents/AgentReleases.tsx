@@ -19,7 +19,9 @@ export function AgentReleases({ name, agent, version, onSelect, disabled }: {
   onSelect: (version: string) => void;
   disabled: boolean;
 }): JSX.Element {
-  const releases = useQuery({ queryKey: ['agent-versions', name], queryFn: () => listAgentVersions(name) });
+  const releases = useQuery({
+    queryKey: ['agent-versions', name], queryFn: () => listAgentVersions(name), staleTime: 10_000,
+  });
   useEffect(() => {
     if (!disabled && !version && agent && releases.data) {
       const selected = defaultRelease(agent, releases.data);

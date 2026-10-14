@@ -180,7 +180,7 @@ export function PromptAgentPlayground(): JSX.Element {
             <AgentGuardrails name={name} version={agent?.version ?? undefined} visible={tab === 'guardrails'} />
           </div>
           <div hidden={tab !== 'a2a'} className="tab-pane">
-            <A2APanel name={name} />
+            <A2APanel name={name} visible={tab === 'a2a'} />
           </div>
         </main>
         <aside className="playground-info">

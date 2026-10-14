@@ -134,6 +134,8 @@ export const AgentVersionSchema = z.object({
   active: z.boolean(),
 });
 export type AgentVersion = z.infer<typeof AgentVersionSchema>;
+const AgentListEntrySchema = AgentSchema.extend({ releases: z.array(AgentVersionSchema) });
+export type AgentListEntry = z.infer<typeof AgentListEntrySchema>;
 
 const PolicyRuleSchema = z.object({
   name: z.string(),
@@ -425,10 +427,10 @@ export async function patchConnectivityFault(enabled: boolean): Promise<Connecti
   );
 }
 
-export async function listAgents(): Promise<Agent[]> {
+export async function listAgents(): Promise<AgentListEntry[]> {
   return (await requestJson('/v1/agents', z.object({
     object: z.literal('list'),
-    data: z.array(AgentSchema),
+    data: z.array(AgentListEntrySchema),
   }))).data;
 }
 

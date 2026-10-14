@@ -118,5 +118,7 @@ func (a *API) handler() http.Handler {
 	mux.HandleFunc("GET /v1/agents/{name}/spans", a.agentSpans)
 	// Authentication belongs to the Envoy human JWT policy and its isolated
 	// Service network boundary; arbitrary forwarded headers are never trusted.
-	return mux
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mux.ServeHTTP(w, inventoryRequest(r))
+	})
 }

@@ -26,6 +26,8 @@ func main() {
 		log.Fatal("in-cluster Kubernetes configuration unavailable")
 	}
 	cfg.Timeout = 15 * time.Second
+	cfg.QPS = 20
+	cfg.Burst = 30
 	objects, err := dynamic.NewForConfig(cfg)
 	if err != nil {
 		log.Fatal("Kubernetes resource client unavailable")

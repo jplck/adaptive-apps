@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -39,14 +38,18 @@ func nullable(s string) any {
 }
 
 func (a *API) catalogue(r *http.Request, kind string) ([]object, error) {
-	list, err := a.objects.Resource(configMaps).Namespace(a.namespace).List(r.Context(), metav1.ListOptions{
-		LabelSelector: "adaptive.jplck.io/resource=" + kind,
-	})
+	resources, err := a.nativeResources(r, configMaps, false)
 	if err != nil {
 		return nil, err
 	}
-	sort.Slice(list.Items, func(i, j int) bool { return list.Items[i].GetName() < list.Items[j].GetName() })
-	return list.Items, nil
+	items := make([]object, 0)
+	for _, item := range resources {
+		if item.GetLabels()["adaptive.jplck.io/resource"] == kind {
+			items = append(items, item)
+		}
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].GetName() < items[j].GetName() })
+	return items, nil
 }
 
 func (a *API) agent(r *http.Request, name string) (*object, error) {
@@ -161,7 +164,7 @@ func (a *API) qualify(r *http.Request, agent *object, rel *release) error {
 	}
 	actual := make([]*object, 0, len(resources))
 	for i, coordinate := range resources {
-		obj, err := a.objects.Resource(coordinate.gvr).Namespace(a.namespace).Get(r.Context(), coordinate.name, metav1.GetOptions{})
+		obj, err := a.nativeObject(r, coordinate.gvr, coordinate.name, i == 1)
 		if apierrors.IsNotFound(err) {
 			return nil
 		}
@@ -197,7 +200,7 @@ func (a *API) qualify(r *http.Request, agent *object, rel *release) error {
 	return nil
 }
 
-func (a *API) releases(r *http.Request, agent *object) ([]release, error) {
+func (a *API) releaseRecords(r *http.Request, agent *object) ([]release, error) {
 	items, err := a.catalogue(r, "agent-release")
 	if err != nil {
 		return nil, err
@@ -231,22 +234,35 @@ func (a *API) releases(r *http.Request, agent *object) ([]release, error) {
 			return nil, failure{http.StatusConflict, "Release ownership is ambiguous"}
 		}
 		seen[version] = true
-		rel := release{snapshot: cm, document: record}
-		if err := a.qualify(r, agent, &rel); err != nil {
-			return nil, err
-		}
-		result = append(result, rel)
+		result = append(result, release{snapshot: cm, document: record})
 	}
 	sort.Slice(result, func(i, j int) bool { return text(result[i].document, "version") < text(result[j].document, "version") })
+	return result, nil
+}
+
+func effectiveRelease(agent *object, releases []release) {
 	effective := ""
-	for _, rel := range result {
+	for _, rel := range releases {
 		if rel.ready && text(rel.document, "version") == text(agent, "data", "activeVersion") {
 			effective = text(rel.document, "version")
 		}
 	}
-	for i := range result {
-		result[i].effective = effective
+	for i := range releases {
+		releases[i].effective = effective
 	}
+}
+
+func (a *API) releases(r *http.Request, agent *object) ([]release, error) {
+	result, err := a.releaseRecords(r, agent)
+	if err != nil {
+		return nil, err
+	}
+	for i := range result {
+		if err := a.qualify(r, agent, &result[i]); err != nil {
+			return nil, err
+		}
+	}
+	effectiveRelease(agent, result)
 	return result, nil
 }
 
@@ -285,12 +301,12 @@ func created(o *object) any {
 	return stamp.Unix()
 }
 
-func (a *API) agentView(r *http.Request, agent *object, rel release) (any, error) {
+func (a *API) agentView(r *http.Request, agent *object, rel release) (map[string]any, error) {
 	name := text(agent, "data", "name")
 	identity := map[string]any{}
 	ref := text(agent, "data", "identityRef")
 	if ref != "" {
-		binding, err := a.objects.Resource(configMaps).Namespace(a.namespace).Get(r.Context(), ref, metav1.GetOptions{})
+		binding, err := a.nativeObject(r, configMaps, ref, true)
 		if err != nil {
 			return nil, err
 		}
@@ -362,6 +378,7 @@ func (a *API) listAgents(r *http.Request) (any, error) {
 		if err != nil {
 			return nil, err
 		}
+		view["releases"] = releaseViews(agent, releases)
 		data = append(data, view)
 	}
 	return map[string]any{"object": "list", "data": data}, nil
@@ -376,10 +393,23 @@ func (a *API) selected(r *http.Request) (*object, release, error) {
 	if err != nil {
 		return nil, release{}, err
 	}
-	releases, err := a.releases(r, agent)
+	releases, err := a.releaseRecords(r, agent)
 	if err != nil {
 		return nil, release{}, err
 	}
+	requested := version
+	if requested == "" {
+		requested = text(agent, "data", "activeVersion")
+	}
+	for i := range releases {
+		releaseVersion := text(releases[i].document, "version")
+		if releaseVersion == requested || releaseVersion == text(agent, "data", "activeVersion") {
+			if err := a.qualify(r, agent, &releases[i]); err != nil {
+				return nil, release{}, err
+			}
+		}
+	}
+	effectiveRelease(agent, releases)
 	rel, err := selectedRelease(agent, version, releases)
 	return agent, rel, err
 }
@@ -405,6 +435,10 @@ func (a *API) listVersions(r *http.Request) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	return map[string]any{"object": "list", "data": releaseViews(agent, releases)}, nil
+}
+
+func releaseViews(agent *object, releases []release) []any {
 	data := make([]any, 0, len(releases))
 	for _, rel := range releases {
 		phase := "Pending"
@@ -415,10 +449,10 @@ func (a *API) listVersions(r *http.Request) (any, error) {
 		}
 		active := text(agent, "data", "activeVersion") == text(rel.document, "version")
 		data = append(data, map[string]any{
-			"name": name, "version": text(rel.document, "version"), "status": phase, "endpoint": responsesEndpoint(rel, agent),
+			"name": text(agent, "data", "name"), "version": text(rel.document, "version"), "status": phase, "endpoint": responsesEndpoint(rel, agent),
 			"created_at": created(rel.snapshot), "definitionDigest": contentDigest(text(rel.snapshot, "data", "release.json")),
 			"requestedActive": active, "active": active && rel.ready,
 		})
 	}
-	return map[string]any{"object": "list", "data": data}, nil
+	return data
 }

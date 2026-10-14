@@ -1,5 +1,5 @@
 import { delay, http, HttpResponse } from 'msw';
-import { Agent, ToolCatalogEntry, Model, Environment } from '../api/client';
+import { Agent, AgentVersion, ToolCatalogEntry, Model, Environment } from '../api/client';
 
 type MutableAgent = Agent & {
   instructions?: string;
@@ -118,6 +118,16 @@ export function resetMockData(): void {
 
 resetMockData();
 
+function mockReleases(agent: Agent): AgentVersion[] {
+  if (!agent.version) return [];
+  return [{
+    name: agent.name, version: agent.version,
+    created_at: epoch('2026-05-20T14:00:00Z'), status: 'Available',
+    endpoint: agent.endpoint, definitionDigest: 'sha256:mock',
+    requestedActive: true, active: true,
+  }];
+}
+
 function streamEvents(events: unknown[], waitMs = 20): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   return new ReadableStream({
@@ -212,7 +222,7 @@ export const handlers = [
   http.get('*/models/v1/models', () => HttpResponse.json({ object: 'list', data: models })),
   http.get('*/v1/environment', () => HttpResponse.json(environmentResponse())),
   http.get('*/v1/agents', () => HttpResponse.json({
-    object: 'list', data: agents,
+    object: 'list', data: agents.map((agent) => ({ ...agent, releases: mockReleases(agent) })),
   })),
   http.get('*/v1/agents/:name', ({ params }) => {
     const agent = findAgent(String(params.name));
@@ -228,18 +238,7 @@ export const handlers = [
   http.get('*/v1/agents/:name/versions', ({ params }) => {
     const agent = findAgent(String(params.name));
     if (!agent) return HttpResponse.json({ code: 'not_found', message: 'Agent not found' }, { status: 404 });
-    return HttpResponse.json({ object: 'list', data: [
-        {
-          name: agent.name,
-          version: agent.version,
-          created_at: epoch('2026-05-20T14:00:00Z'),
-          status: 'Available',
-          endpoint: agent.endpoint,
-          definitionDigest: 'sha256:mock',
-          requestedActive: true,
-          active: true,
-        },
-      ] });
+    return HttpResponse.json({ object: 'list', data: mockReleases(agent) });
   }),
   http.get('*/v1/agents/:name/agent-card', ({ params }) => {
     const name = String(params.name);

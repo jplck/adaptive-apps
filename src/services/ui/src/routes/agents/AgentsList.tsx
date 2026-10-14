@@ -11,44 +11,38 @@ import {
   Text,
   createTableColumn,
 } from '@fluentui/react-components';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Agent, listAgents, listAgentVersions } from '../../api/client';
+import { AgentListEntry, listAgents } from '../../api/client';
 
-function ReleaseInventory({ name }: { name: string }): JSX.Element {
-  const query = useQuery({ queryKey: ['agent-versions', name], queryFn: () => listAgentVersions(name), refetchInterval: 10_000 });
-  if (query.isLoading) return <Text>Loading releases…</Text>;
-  if (query.error) return <Text>Release inventory unavailable</Text>;
-  return <Text>{query.data?.map((release) => `${release.version} · ${release.status}`).join(', ') || 'No captured releases'}</Text>;
-}
-
-const columns: TableColumnDefinition<Agent>[] = [
-  createTableColumn<Agent>({
+const columns: TableColumnDefinition<AgentListEntry>[] = [
+  createTableColumn<AgentListEntry>({
     columnId: 'name',
     renderHeaderCell: () => 'Name',
     renderCell: (agent) => <Text weight="semibold">{agent.name}</Text>,
   }),
-  createTableColumn<Agent>({
+  createTableColumn<AgentListEntry>({
     columnId: 'version',
     renderHeaderCell: () => 'Releases',
-    renderCell: (agent) => <ReleaseInventory name={agent.name} />,
+    renderCell: (agent) => <Text>{agent.releases.map((release) => `${release.version} · ${release.status}`).join(', ') || 'No captured releases'}</Text>,
   }),
-  createTableColumn<Agent>({
+  createTableColumn<AgentListEntry>({
     columnId: 'requested',
     renderHeaderCell: () => 'Requested active',
     renderCell: (agent) => agent.requestedActiveVersion ?? '—',
   }),
-  createTableColumn<Agent>({
+  createTableColumn<AgentListEntry>({
     columnId: 'effective',
     renderHeaderCell: () => 'Effective active',
     renderCell: (agent) => agent.activeVersion ?? '—',
   }),
-  createTableColumn<Agent>({
+  createTableColumn<AgentListEntry>({
     columnId: 'readiness',
     renderHeaderCell: () => 'Active readiness',
     renderCell: (agent) => agent.phase ?? 'Unknown',
   }),
-  createTableColumn<Agent>({
+  createTableColumn<AgentListEntry>({
     columnId: 'type',
     renderHeaderCell: () => 'Type',
     renderCell: (agent) => (
@@ -57,14 +51,14 @@ const columns: TableColumnDefinition<Agent>[] = [
       </Badge>
     ),
   }),
-  createTableColumn<Agent>({
+  createTableColumn<AgentListEntry>({
     columnId: 'created',
     renderHeaderCell: () => 'Created',
     renderCell: (agent) => agent.created != null
       ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(agent.created * 1000))
       : '—',
   }),
-  createTableColumn<Agent>({
+  createTableColumn<AgentListEntry>({
     columnId: 'description',
     renderHeaderCell: () => 'Description',
     renderCell: (agent) => agent.description ?? '—',
@@ -73,8 +67,15 @@ const columns: TableColumnDefinition<Agent>[] = [
 
 export function AgentsList(): JSX.Element {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const agentsQuery = useQuery({ queryKey: ['agents'], queryFn: listAgents, refetchInterval: 10_000 });
   const agents = agentsQuery.data ?? [];
+  useEffect(() => {
+    for (const agent of agentsQuery.data ?? []) {
+      queryClient.setQueryData(['agent', agent.name], agent);
+      queryClient.setQueryData(['agent-versions', agent.name], agent.releases);
+    }
+  }, [agentsQuery.data, queryClient]);
 
   return (
     <section className="page agents-list-page">
@@ -96,9 +97,9 @@ export function AgentsList(): JSX.Element {
             {({ renderHeaderCell }) => <DataGridHeaderCell>{renderHeaderCell()}</DataGridHeaderCell>}
           </DataGridRow>
         </DataGridHeader>
-        <DataGridBody<Agent>>
+        <DataGridBody<AgentListEntry>>
           {({ item, rowId }) => (
-            <DataGridRow<Agent>
+            <DataGridRow<AgentListEntry>
               key={rowId}
               onClick={() => navigate(`/agents/${encodeURIComponent(item.name)}/${item.type}`)}
               className="clickable-row"

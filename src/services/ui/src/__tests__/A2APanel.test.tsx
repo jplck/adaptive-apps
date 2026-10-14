@@ -1,12 +1,30 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import { useState } from 'react';
 import { A2APanel } from '../routes/agents/A2APanel';
 import { server } from '../mocks/server';
 import { renderWithProviders } from './testUtils';
 
 describe('A2APanel', () => {
+  it('does not fetch a hidden tab and starts fetching when visible', async () => {
+    const fetchCard = vi.fn(() => HttpResponse.json({
+      enabled: false, declared: {}, resolved: {}, resolvedCardHash: 'none',
+      allowedCallers: [], peers: [],
+    }));
+    server.use(http.get('*/v1/agents/:name/agent-card', fetchCard));
+    function Panel(): JSX.Element {
+      const [visible, setVisible] = useState(false);
+      return <><button onClick={() => setVisible(true)}>Show A2A</button>
+        <A2APanel name="trip-scout" visible={visible} /></>;
+    }
+    renderWithProviders(<Panel />);
+    expect(fetchCard).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Show A2A' }));
+    await screen.findByTestId('a2a-resolved-card');
+    expect(fetchCard).toHaveBeenCalledOnce();
+  });
   it('shows read-only configuration and retains live validation and calls', async () => {
-    renderWithProviders(<A2APanel name="trip-scout" />);
+    renderWithProviders(<A2APanel name="trip-scout" visible />);
     await screen.findByTestId('a2a-resolved-card');
     expect(screen.getByLabelText('Public well-known URL')).toHaveAttribute('readonly');
     expect(screen.queryByRole('switch')).not.toBeInTheDocument();
@@ -22,7 +40,7 @@ describe('A2APanel', () => {
       http.post('*/v1/agents/:name/agent-card/validate', () => new HttpResponse(null, { status: 502 })),
       http.post('*/v1/agents/:name/a2a/test-call', () => new HttpResponse(null, { status: 503 })),
     );
-    renderWithProviders(<A2APanel name="trip-scout" />);
+    renderWithProviders(<A2APanel name="trip-scout" visible />);
     await screen.findByTestId('a2a-resolved-card');
     fireEvent.click(screen.getByRole('button', { name: 'Validate live card' }));
     expect(await screen.findByText(/502/)).toBeInTheDocument();
@@ -35,7 +53,7 @@ describe('A2APanel', () => {
       enabled: false, declared: {}, resolved: {}, resolvedCardHash: 'none',
       allowedCallers: [], peers: [],
     })));
-    renderWithProviders(<A2APanel name="trip-scout" />);
+    renderWithProviders(<A2APanel name="trip-scout" visible />);
     await screen.findByTestId('a2a-resolved-card');
     expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
     expect(screen.getByText('No configured peers')).toBeInTheDocument();
