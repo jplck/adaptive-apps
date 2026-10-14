@@ -102,6 +102,8 @@ def test_native_agent_model_and_mcp_calls_share_invocation_trace() -> None:
         env.update(
             OTEL_EXPORTER_OTLP_ENDPOINT=f"http://127.0.0.1:{server.server_port}",
             OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf",
+            OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=f"http://127.0.0.1:{server.server_port}/sidecar/v1/traces",
+            OTEL_EXPORTER_OTLP_TRACES_PROTOCOL="http/protobuf",
             OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT="false",
         )
         try:
@@ -157,10 +159,12 @@ for provider in (trace.get_tracer_provider(), metrics.get_meter_provider(), get_
     spans, model_parents, tool_parents = [], [], []
     while not received.empty():
         path, headers, body = received.get_nowait()
-        if path == "/v1/traces":
+        if path == "/sidecar/v1/traces":
             for resource in ExportTraceServiceRequest.FromString(body).resource_spans:
                 for scope in resource.scope_spans:
                     spans.extend(scope.spans)
+        elif path == "/v1/traces":
+            raise AssertionError("Native host bypassed the trace-specific sidecar endpoint")
         elif path == "/v1/chat/completions":
             model_parents.append({k.lower(): v for k, v in headers.items()}.get("traceparent"))
         elif path == "/mcp":

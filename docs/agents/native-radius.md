@@ -82,6 +82,20 @@ accepted/programmed ingress and exact Radius ownership. An unready update does
 not produce a success-shaped endpoint and there is no release fallback.
 Monitor reads bounded native Jaeger/Loki records, not manufactured events.
 
+Native Responses host traces use the SDK's signal-specific
+`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`: localhost `a365-collector` forwards them
+to the central collector and Jaeger. The stock per-agent collector supplies
+declared agent identity and, when connected, tenant/blueprint attributes without
+changing span names, operation names or parent relationships. Logs and metrics
+retain their central SDK endpoint. The sidecar has bounded in-memory retry,
+not durable replay.
+
+This local Monitor path does not establish Microsoft 365 cloud ingestion:
+the old operator's separate authenticated A365 export branch is not implemented
+in this capability. Cloud registration, permissions, licensing and delivery
+remain separate gates; disabling the SDK's direct cloud exporter prevents
+accidental duplicate or unqualified exports.
+
 ## Delivery
 
 Use an isolated cluster for first qualification. Kubernetes 1.33+ with
@@ -229,7 +243,7 @@ or platform resources owned by the mutable workload.
    `rad resource-type create --from-file radius/resource-types/types.yaml`.
    Generate its existing extension:
    `rad bicep publish-extension --from-file radius/resource-types/types.yaml --target radius/types.tgz`.
-2. Publish `agents` at `0.5.0`, `agent-guardrails` at `0.3.0`,
+2. Publish `agents` at `0.6.1`, `agent-guardrails` at `0.3.0`,
    `ai-models` at `0.5.2` and `ai-gateways` at `0.2.0`, using
    `rad bicep publish`.
    Their files are `recipes/agents/logical.bicep` (which includes the internal
@@ -312,6 +326,11 @@ Platform recipe bindings are `policyServiceImage`, `strictResponses`,
 digests. Local peer identities may use `{namespace}` in `keycloakClientId` and
 `agentId`; `ada init` resolves it to the selected namespace. `ingressUrl` is the
 public client origin, not an internal DNS name.
+The runtime NetworkPolicy uses the shared portfolio's
+`app.kubernetes.io/component=keycloak` selector by default. For an existing
+Keycloak deployment with different labels, supply its exact
+`keycloakPodSelector` once in the environment; a Service URL alone cannot
+identify the NetworkPolicy's target Pods.
 Model-gateway chart values require an exact issuer/JWKS URL and explicit
 per-agent Keycloak client allowlist. Connected Azure models use the gateway's
 own federated workload identity; no Azure API key is introduced. Public OpenAI
@@ -705,13 +724,36 @@ Read-only Jaeger inspection later on 2026-10-13 confirmed that the shared
 collector receives actual SDK spans under the correct release service names.
 Prompt traces contain `invoke_agent writer` with a child `chat local-chat`, and
 hosted-to-prompt calls preserve the trace and parent IDs. They do not contain
-the required intermediate `agent_run` span. This is a native instrumentation
-shape gap, not absent collector delivery; do not manufacture or rename spans
-to pass the gate. The min-ai collector also has no metrics pipeline, while
+the originally specified intermediate `agent_run` span. Microsoft's current
+[direct A365 contract](https://learn.microsoft.com/microsoft-agent-365/developer/direct-open-telemetry-integration#message-contracts)
+accepts `invoke_agent`, `chat`, `execute_tool` and `output_messages`, not
+`agent_run`. The old three-level requirement therefore remains a specification
+decision, not evidence that the collector lost a supported A365 operation.
+Do not manufacture or rename spans to pass that gate.
+The min-ai collector also has no metrics pipeline, while
 the image's SDK emits metrics, producing explicit HTTP 404 export errors.
 After CPU-model retirement, the isolated setup's old gateway configuration
 still references the removed CPU backend; it is not a currently qualified
 inference installation. The host cluster's GPU/Foundry proof remains separate.
+
+On 2026-10-14, `agent-release:0.4.1` restored the stock per-agent trace collector
+in the original host cluster through new Radius `otel-v2` releases. The prompt
+and hosted agent image digests were unchanged. Both users completed prompt and
+hosted peer invocation; writer SSE and stored/background denials also passed.
+The authenticated Monitor stream returned 28 native spans from those requests,
+with exact agent/version/tenant/blueprint attributes and preserved peer trace
+IDs. Actual browser Monitor sessions for both users displayed the live
+`invoke_agent` and `chat` A365 badges. All 13 pre-existing
+logical/identity/release captures and PVCs retained
+their UIDs and immutable content. The ready `otel-v2` releases were then
+explicitly selected through Radius.
+
+The unchanged hosted editor emits HTTP spans, not its own `invoke_agent`:
+its writer/auditor peers emit native `invoke_agent` and `chat` spans in the same
+trace. That instrumentation limitation is separate from the repaired delivery
+path. Neither an intermediate `agent_run` nor cloud A365 ingestion is claimed.
+Evidence is retained in
+`.adaptive/diagnostics/a365-delivery/{invocation-monitor,retention,browser}.json`.
 
 ## Pending Foundry 1:1 agent-hosting proof
 

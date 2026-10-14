@@ -12,6 +12,7 @@ var name = 'agent-${uniqueString(namespace, p.agentUid)}'
 var claimName = 'state-${uniqueString(p.agentUid)}'
 var path = '/agents/${p.agentName}'
 var image = def.kind == 'prompt' ? def.runtimeImage : def.image
+var connected = !empty(id.?blueprintId ?? '')
 var graph = def.kind == 'prompt' && !empty(def.?tools ?? []) && (id.?graphDelegation ?? false)
 var governanceConfig = p.?governance.?config ?? ''
 var governanceDigest = p.?governance.?digest ?? ''
@@ -51,6 +52,41 @@ async def main():
 asyncio.run(main())
 '''
 var responsePath = '${path}/responses'
+var collectorConfig = {
+  extensions: { health_check: { endpoint: '0.0.0.0:13134' } }
+  receivers: { otlp: { protocols: { http: { endpoint: '127.0.0.1:4318' } } } }
+  processors: {
+    memory_limiter: { check_interval: '1s', limit_mib: 192, spike_limit_mib: 48 }
+    'attributes/agent': {
+      actions: concat([
+        { key: 'gen_ai.agent.id', value: connected ? id.entraClientId : id.keycloakClientId, action: 'upsert' }
+        { key: 'gen_ai.agent.name', value: p.agentName, action: 'upsert' }
+      ], connected ? [
+        { key: 'microsoft.tenant.id', value: id.entraTenantId, action: 'upsert' }
+        { key: 'microsoft.a365.agent.blueprint.id', value: id.blueprintId, action: 'upsert' }
+      ] : [])
+    }
+    batch: { timeout: '1s', send_batch_size: 32, send_batch_max_size: 32 }
+  }
+  exporters: {
+    'otlp_http/central': {
+      endpoint: platform.otelEndpoint
+      timeout: '10s'
+      sending_queue: { enabled: true, queue_size: 128, num_consumers: 2 }
+      retry_on_failure: { enabled: true, initial_interval: '1s', max_interval: '5s', max_elapsed_time: '30s' }
+    }
+  }
+  service: {
+    extensions: ['health_check']
+    pipelines: {
+      traces: {
+        receivers: ['otlp']
+        processors: ['memory_limiter', 'attributes/agent', 'batch']
+        exporters: ['otlp_http/central']
+      }
+    }
+  }
+}
 var agentEnv = concat([
   { name: 'AGENT_NAME', value: p.agentName }
   { name: 'AGENT_NAMESPACE', value: namespace }
@@ -64,6 +100,9 @@ var agentEnv = concat([
   { name: 'KEYCLOAK_CLIENT_SECRET', valueFrom: { secretKeyRef: { name: binding.secretRef, key: 'KEYCLOAK_CLIENT_SECRET' } } }
   { name: 'OTEL_EXPORTER_OTLP_ENDPOINT', value: platform.otelEndpoint }
   { name: 'OTEL_EXPORTER_OTLP_PROTOCOL', value: 'http/protobuf' }
+  { name: 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', value: 'http://127.0.0.1:4318/v1/traces' }
+  { name: 'OTEL_EXPORTER_OTLP_TRACES_PROTOCOL', value: 'http/protobuf' }
+  { name: 'ENABLE_A365_OBSERVABILITY_EXPORTER', value: 'false' }
   { name: 'OTEL_SERVICE_NAME', value: name }
   { name: 'OTEL_RESOURCE_ATTRIBUTES', value: 'service.namespace=${namespace},k8s.namespace.name=${namespace},adaptive.agent.name=${p.agentName}' }
 ], def.kind == 'prompt' ? [
@@ -148,7 +187,7 @@ resource workload 'apps/StatefulSet@v1' = {
       metadata: {
         labels: labels
         annotations: {
-          'azure.workload.identity/skip-containers': 'agent;delegation-broker;governance-sidecar;native-state'
+          'azure.workload.identity/skip-containers': 'agent;delegation-broker;governance-sidecar;native-state;a365-collector'
           'sidecar.istio.io/inject': 'false'
           'kubectl.kubernetes.io/default-container': 'agent'
         }
@@ -185,6 +224,19 @@ resource workload 'apps/StatefulSet@v1' = {
             resources: p.?resources ?? { requests: { cpu: '100m', memory: '256Mi' }, limits: { memory: '1Gi' } }
             readinessProbe: { httpGet: { path: '/readiness', port: 'http' } }
             livenessProbe: { httpGet: { path: '/readiness', port: 'http' } }
+          }
+          {
+            name: 'a365-collector'
+            image: 'otel/opentelemetry-collector-contrib:0.162.0@sha256:39923a8e431bd1f57be82411999d389fcfe40857492e4365456d97a4c1f74be6'
+            args: ['--config=env:A365_OTEL_CONFIG']
+            env: [{ name: 'A365_OTEL_CONFIG', value: string(collectorConfig) }]
+            securityContext: union(security, { readOnlyRootFilesystem: true })
+            resources: {
+              requests: { cpu: '50m', memory: '128Mi' }
+              limits: { cpu: '500m', memory: '256Mi' }
+            }
+            readinessProbe: { httpGet: { path: '/', port: 13134 } }
+            livenessProbe: { httpGet: { path: '/', port: 13134 } }
           }
         ], graph ? [{
           name: 'delegation-broker'
@@ -372,7 +424,7 @@ resource isolation 'networking.k8s.io/NetworkPolicy@v1' = {
         ports: [{ protocol: 'UDP', port: 53 }, { protocol: 'TCP', port: 53 }]
       }
       {
-        to: [{ podSelector: { matchLabels: { 'app.kubernetes.io/component': 'keycloak' } } }]
+        to: [{ podSelector: { matchLabels: platform.?keycloakPodSelector ?? { 'app.kubernetes.io/component': 'keycloak' } } }]
         ports: [{ protocol: 'TCP', port: 8080 }]
       }
       {

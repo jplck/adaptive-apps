@@ -67,11 +67,8 @@ def test_runtime_module_exposes_responses_host() -> None:
 def test_agent_is_a_chat_agent_with_env_injected_prompt() -> None:
     runtime = _import()
 
-    # The agent is what ResponsesHostServer calls .run() on per turn;
-    # ChatAgent.run() is the code path that emits the three A365 spans
-    # (invoke_agent → Agent run → chat <model>). Asserting the agent
-    # carries the operator-injected prompt + name guarantees a
-    # hand-rolled @response_handler regression doesn't reappear.
+    # ResponsesHostServer calls agent.run(), enabling native invoke_agent
+    # and chat spans rather than bypassing the framework with a handler.
     agent = runtime.agent
     assert getattr(agent, "name", None) == "writer"
     # Instructions, temperature and top_p flow through ChatAgent.default_options
