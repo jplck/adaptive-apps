@@ -143,6 +143,28 @@ class NativeAgents(unittest.TestCase):
         self.assertIn("app.kubernetes.io/component", json.dumps(release))
         self.assertNotIn("agentPlatforms", (ROOT / "radius/resource-types/types.yaml").read_text())
 
+    def test_native_host_traces_use_per_agent_collector(self):
+        release = self.compiled["radius/recipes/agents/release.bicep"]
+        env = release["variables"]["agentEnv"]
+        self.assertIn("'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', 'value', 'http://127.0.0.1:4318/v1/traces'", env)
+        self.assertIn("'OTEL_EXPORTER_OTLP_TRACES_PROTOCOL', 'value', 'http/protobuf'", env)
+        self.assertIn("'ENABLE_A365_OBSERVABILITY_EXPORTER', 'value', 'false'", env)
+        config = release["variables"]["collectorConfig"]
+        self.assertEqual(config["receivers"]["otlp"]["protocols"]["http"]["endpoint"],
+                         "127.0.0.1:4318")
+        pipeline = config["service"]["pipelines"]["traces"]
+        self.assertEqual(pipeline["exporters"], ["otlp_http/central"])
+        self.assertEqual(pipeline["processors"], ["memory_limiter", "attributes/agent", "batch"])
+        self.assertEqual(config["exporters"]["otlp_http/central"]["sending_queue"]["queue_size"], 128)
+        actions = json.dumps(config["processors"]["attributes/agent"])
+        self.assertIn("microsoft.a365.agent.blueprint.id", actions)
+        self.assertNotIn("gen_ai.operation.name", actions)
+        containers = release["resources"]["workload"]["properties"]["spec"]["template"]["spec"]["containers"]
+        self.assertIn("a365-collector", json.dumps(containers))
+        service = release["resources"]["service"]["properties"]["spec"]["ports"]
+        self.assertEqual({port["port"] for port in service}, {8080, 8083})
+        self.assertIn("keycloakPodSelector", json.dumps(release["resources"]["isolation"]))
+
     def test_gpu_models_and_keyless_gateway(self):
         compiled = self.compiled["radius/recipes/ai-agent/native-gateway.bicep"]
         kinds = {entry["type"].split("@")[0] for entry in compiled["resources"].values()}
