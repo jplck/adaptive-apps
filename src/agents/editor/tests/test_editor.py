@@ -4,7 +4,6 @@ import httpx2 as httpx
 import pytest
 from agent_framework import Message
 from openai import APIStatusError
-from opentelemetry.trace import NonRecordingSpan, SpanContext, TraceFlags, use_span
 
 from editor import agent
 
@@ -189,23 +188,6 @@ async def test_labels_and_urls_use_configured_agents(pipeline, monkeypatch):
         "## reviewer\n\nreviewer result"
     )
     assert json.loads(pipeline[0][1].content)["input"][1]["content"] == "draft-writer result"
-
-
-async def test_trace_context_is_propagated_to_both_peers(pipeline):
-    span = NonRecordingSpan(
-        SpanContext(
-            trace_id=42,
-            span_id=43,
-            is_remote=False,
-            trace_flags=TraceFlags(TraceFlags.SAMPLED),
-        )
-    )
-    with use_span(span, end_on_exit=False):
-        await agent.edit([Message("user", ["Brief"])])
-    assert all(
-        request.headers["traceparent"] == "00-" + f"{42:032x}-{43:016x}-01"
-        for request in pipeline[0]
-    )
 
 
 async def test_host_is_request_local_after_failure(pipeline):

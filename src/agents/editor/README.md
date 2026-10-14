@@ -20,5 +20,13 @@ no Foundry project or agent client is used. Cloud-specific routing/user delegati
 and same-image Foundry hosting remain unqualified.
 The image contains no Adaptive client library or Kubernetes/Radius access.
 
+The deterministic pipeline uses Agent Framework's `AgentTelemetryLayer`, the
+same native invocation layer used by framework chat agents. Each foreground
+or streaming run emits `invoke_agent editor`; SDK-managed HTTPX instrumentation
+propagates its trace context to both OpenAI-compatible peers. Errors are
+reported on that invocation span and still abort the sequence. There are no
+handwritten OpenTelemetry spans or propagation hooks, no editor LLM call,
+and no artificial tool calls.
+
 See the [native agent guide](../../../docs/agents/native-radius.md)
 for native Radius delivery.
