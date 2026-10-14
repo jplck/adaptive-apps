@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from collections.abc import AsyncIterator, Awaitable
 from functools import partial
-from typing import Literal, overload
+from typing import Literal
 from urllib.parse import urlsplit
 
 from agent_framework import (
@@ -17,13 +17,13 @@ from agent_framework import (
     ResponseStream,
     normalize_messages,
 )
+from agent_framework.observability import AgentTelemetryLayer
 from agent_framework_foundry_hosting import ResponsesHostServer
 from azure.ai.agentserver.core import configure_observability
 from azure.ai.agentserver.responses import ResponsesServerOptions
 from azure.identity.aio import DefaultAzureCredential
 from openai import AsyncOpenAI, DefaultAsyncHttpxClient
 from openai.types.responses import ResponseInputItemParam
-from opentelemetry.propagate import inject
 
 
 async def edit(messages: list[Message]) -> AgentResponse:
@@ -83,11 +83,7 @@ async def edit(messages: list[Message]) -> AgentResponse:
                 timeout=600.0,
                 http_client=DefaultAsyncHttpxClient(trust_env=False),
             ) as specialist:
-                headers: dict[str, str] = {}
-                inject(headers)
-                result = await specialist.responses.create(
-                    input=context, store=False, extra_headers=headers
-                )
+                result = await specialist.responses.create(input=context, store=False)
             if result.status != "completed" or any(
                 item.type
                 in ("function_call", "custom_tool_call", "computer_call", "mcp_approval_request")
@@ -101,25 +97,7 @@ async def edit(messages: list[Message]) -> AgentResponse:
     return AgentResponse(messages=[Message("assistant", ["\n\n".join(outputs)])])
 
 
-class Editor(BaseAgent):
-    @overload
-    def run(
-        self,
-        messages: AgentRunInputs | None = None,
-        *,
-        stream: Literal[False] = False,
-        **kwargs: object,
-    ) -> Awaitable[AgentResponse]: ...
-
-    @overload
-    def run(
-        self,
-        messages: AgentRunInputs | None = None,
-        *,
-        stream: Literal[True],
-        **kwargs: object,
-    ) -> ResponseStream[AgentResponseUpdate, AgentResponse]: ...
-
+class EditorPipeline(BaseAgent):
     def run(
         self,
         messages: AgentRunInputs | None = None,
@@ -141,6 +119,11 @@ class Editor(BaseAgent):
                 response_id=result.response_id,
                 finish_reason="stop",
             )
+
+
+# The framework's schema-generic telemetry layer wraps this fixed-text pipeline.
+class Editor(AgentTelemetryLayer, EditorPipeline):  # type: ignore[misc]
+    AGENT_PROVIDER_NAME = "microsoft.agent_framework"
 
 
 def main() -> None:

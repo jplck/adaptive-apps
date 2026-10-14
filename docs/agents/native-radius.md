@@ -660,12 +660,41 @@ logical/identity/release captures and PVCs retained
 their UIDs and immutable content. The ready `otel-v2` releases were then
 explicitly selected through Radius.
 
-The unchanged hosted editor emits HTTP spans, not its own `invoke_agent`:
+The `otel-v2` hosted editor emitted HTTP spans, not its own `invoke_agent`:
 its writer/auditor peers emit native `invoke_agent` and `chat` spans in the same
 trace. That instrumentation limitation is separate from the repaired delivery
 path. Neither an intermediate `agent_run` nor cloud A365 ingestion is claimed.
 Evidence is retained in
 `.adaptive/diagnostics/a365-delivery/{invocation-monitor,retention,browser}.json`.
+
+On 2026-10-14, the editor's new `af-v1` release replaced that instrumentation
+limitation with Agent Framework's native `AgentTelemetryLayer`. The pipeline
+still calls writer then auditor through OpenAI-compatible Responses clients
+and DAC, with explicit `otel-v2` peer versions. It has no Foundry project client,
+new LLM, workflow engine, handwritten span or propagation hook. SDK-managed
+HTTPX instrumentation propagates the real editor invocation context. The editor
+image was rebuilt and pinned to OCI digest
+`sha256:05cc88a5d1cb050e38077ba781614230949c699f71d72e441125817cbad69fb0`;
+writer/auditor images and previous release declarations were not changed.
+
+Real foreground calls for both users and an editor streaming call delivered
+`invoke_agent editor` with child peer HTTP calls, native peer `invoke_agent`
+and their child `chat` spans to the authenticated Monitor. Exact trace ancestry
+and agent/version/tenant/blueprint metadata were verified; the editor itself
+does not call a model or execute a tool. Stored/background execution remained
+denied. The ready editor release was explicitly selected through Radius, and
+all 25 previous captures/PVCs retained exact UIDs and immutable content.
+All 34 editor tests, Ruff checks and strict mypy passed, including real OTLP
+export, cross-task streaming and foreground/streaming error reporting.
+Evidence is retained in
+`.adaptive/diagnostics/editor-framework/{workload,invocation-monitor,retention}.json`.
+Hosted-editor browser Monitor qualification did not pass: the Monitor request
+returned HTTP 503 (`Kubernetes operational data unavailable`), with inventory
+requests also returning HTTP 504. Browser login and selected-release metadata
+worked. The cause is unresolved; successful authenticated Monitor API delivery
+is not a claim that this browser gate passed.
+Cloud hosting and Microsoft 365 cloud ingestion remain separate unqualified
+gates; this change does not manufacture `agent_run` or claim metrics delivery.
 
 ## Pending Foundry 1:1 agent-hosting proof
 
