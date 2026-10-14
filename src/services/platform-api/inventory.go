@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"math"
 	"net/http"
+	"reflect"
 	"sort"
 	"strconv"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -38,14 +38,18 @@ func nullable(s string) any {
 }
 
 func (a *API) catalogue(r *http.Request, kind string) ([]object, error) {
-	list, err := a.objects.Resource(configMaps).Namespace(a.namespace).List(r.Context(), metav1.ListOptions{
-		LabelSelector: "adaptive.jplck.io/resource=" + kind,
-	})
+	list, err := a.nativeResources(r, configMaps, false)
 	if err != nil {
 		return nil, err
 	}
-	sort.Slice(list.Items, func(i, j int) bool { return list.Items[i].GetName() < list.Items[j].GetName() })
-	return list.Items, nil
+	items := []object{}
+	for _, item := range list {
+		if item.GetLabels()["adaptive.jplck.io/resource"] == kind {
+			items = append(items, item)
+		}
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].GetName() < items[j].GetName() })
+	return items, nil
 }
 
 func (a *API) agent(r *http.Request, name string) (*object, error) {
@@ -135,18 +139,22 @@ func exact(items []object, description string) (*object, error) {
 func (a *API) runtime(r *http.Request, agent *object) (agentRuntime, error) {
 	uid := text(agent, "data", "agentUid")
 	radiusID := agent.GetAnnotations()["radius.resource.id"]
-	selector := "adaptive.jplck.io/agent-uid=" + uid
 	statefulSets := schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "statefulsets"}
-	workloads, err := a.objects.Resource(statefulSets).Namespace(a.namespace).List(r.Context(), metav1.ListOptions{
-		LabelSelector: selector + ",app.kubernetes.io/component=agent-runtime",
-	})
+	workloads, err := a.nativeResources(r, statefulSets, false)
 	if err != nil {
 		return agentRuntime{}, err
 	}
-	if len(workloads.Items) == 0 {
+	matching := []object{}
+	for _, item := range workloads {
+		if item.GetLabels()["adaptive.jplck.io/agent-uid"] == uid &&
+			item.GetLabels()["app.kubernetes.io/component"] == "agent-runtime" {
+			matching = append(matching, item)
+		}
+	}
+	if len(matching) == 0 {
 		return agentRuntime{document: agentDocument(agent)}, nil
 	}
-	workload, err := exact(workloads.Items, "Agent runtime")
+	workload, err := exact(matching, "Agent runtime")
 	if err != nil {
 		return agentRuntime{}, err
 	}
@@ -158,7 +166,7 @@ func (a *API) runtime(r *http.Request, agent *object) (agentRuntime, error) {
 	}
 	actual := make([]*object, 0, len(coordinates))
 	for _, gvr := range coordinates {
-		item, err := a.objects.Resource(gvr).Namespace(a.namespace).Get(r.Context(), name, metav1.GetOptions{})
+		item, err := a.nativeObject(r, gvr, name, false)
 		if apierrors.IsNotFound(err) {
 			return agentRuntime{document: agentDocument(agent), deployment: workload}, nil
 		}
@@ -167,18 +175,23 @@ func (a *API) runtime(r *http.Request, agent *object) (agentRuntime, error) {
 		}
 		actual = append(actual, item)
 	}
-	claims, err := a.objects.Resource(schema.GroupVersionResource{Version: "v1", Resource: "persistentvolumeclaims"}).
-		Namespace(a.namespace).List(r.Context(), metav1.ListOptions{LabelSelector: selector})
+	claims, err := a.nativeResources(r, schema.GroupVersionResource{Version: "v1", Resource: "persistentvolumeclaims"}, false)
 	if err != nil {
 		return agentRuntime{}, err
 	}
-	claim, err := exact(claims.Items, "Agent state")
+	matching = nil
+	for _, item := range claims {
+		if item.GetLabels()["adaptive.jplck.io/agent-uid"] == uid {
+			matching = append(matching, item)
+		}
+	}
+	claim, err := exact(matching, "Agent state")
 	if err != nil {
 		return agentRuntime{}, err
 	}
-	gateway, err := a.objects.Resource(schema.GroupVersionResource{
+	gateway, err := a.nativeObject(r, schema.GroupVersionResource{
 		Group: "gateway.networking.k8s.io", Version: "v1", Resource: "gateways",
-	}).Namespace(a.namespace).Get(r.Context(), "agent-ingress", metav1.GetOptions{})
+	}, "agent-ingress", false)
 	if err != nil {
 		return agentRuntime{}, err
 	}
@@ -191,6 +204,14 @@ func (a *API) runtime(r *http.Request, agent *object) (agentRuntime, error) {
 	}
 	service, route, policy := actual[0], actual[1], actual[2]
 	_ = service
+	current, err := a.nativeObject(r, configMaps, agent.GetName(), true)
+	if err != nil {
+		return agentRuntime{}, err
+	}
+	if current.GetUID() != agent.GetUID() || !reflect.DeepEqual(current.Object["data"], agent.Object["data"]) ||
+		!reflect.DeepEqual(current.GetAnnotations(), agent.GetAnnotations()) || current.GetDeletionTimestamp() != nil {
+		return agentRuntime{}, failure{http.StatusConflict, "Agent changed during inventory; retry discovery"}
+	}
 	ready := agent.GetDeletionTimestamp() == nil &&
 		field(workload, "status", "observedGeneration") == workload.GetGeneration() && workload.GetGeneration() > 0 &&
 		field(workload, "spec", "replicas") == int64(1) && field(workload, "status", "readyReplicas") == int64(1) &&
@@ -237,7 +258,7 @@ func (a *API) agentView(r *http.Request, agent *object, runtime agentRuntime) (a
 	name := text(agent, "data", "name")
 	identity := map[string]any{}
 	ref := text(agent, "data", "identityRef")
-	binding, err := a.objects.Resource(configMaps).Namespace(a.namespace).Get(r.Context(), ref, metav1.GetOptions{})
+	binding, err := a.nativeObject(r, configMaps, ref, true)
 	if err != nil {
 		return nil, err
 	}

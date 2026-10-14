@@ -27,7 +27,7 @@ rules:
     verbs: ["get", "list"]
   - apiGroups: ["gateway.networking.k8s.io"]
     resources: ["httproutes", "gateways"]
-    verbs: ["get"]
+    verbs: ["get", "list"]
   - apiGroups: ["agentgateway.dev"]
     resources: ["agentgatewaypolicies"]
     verbs: ["get", "list"]

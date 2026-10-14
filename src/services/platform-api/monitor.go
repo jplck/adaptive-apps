@@ -93,6 +93,7 @@ type monitorRecord struct {
 }
 
 func (a *API) monitorServices(r *http.Request) (string, map[string]string, error) {
+	r = inventoryRequest(r)
 	name, err := selection(r)
 	if err != nil {
 		return "", nil, err

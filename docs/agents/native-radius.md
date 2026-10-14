@@ -376,6 +376,13 @@ a second policy format. Default-deny policies are enforced by the locked AGT
 sidecar without modifying agent code. Unsupported policies fail readiness;
 the catalogue alone is not proof of runtime enforcement.
 
+Platform-scoped policies are not automatically attached or reapplied by this
+operator-free capability. Governance must be explicitly captured in a release
+declaration. Shared model ingress currently routes directly to the model gateway,
+without a global AGT enforcement hop. Consequently, publishing a global PII
+policy does not protect every agent or UI model call. Current proxy stages are
+`pre_input` and `pre_tool`; output filtering/redaction is not implemented.
+
 Deploy policies independently through `radius/agent-policy.bicep`, passing
 `environment`, `policyName`, canonical `policyContent` and `policyDigest`.
 `PolicyDefinition.canonical()` produces the content; compute its SHA-256 from
@@ -776,13 +783,67 @@ All 34 editor tests, Ruff checks and strict mypy passed, including real OTLP
 export, cross-task streaming and foreground/streaming error reporting.
 Evidence is retained in
 `.adaptive/diagnostics/editor-framework/{workload,invocation-monitor,retention}.json`.
-Hosted-editor browser Monitor qualification did not pass: the Monitor request
+Initial hosted-editor browser Monitor qualification did not pass: the Monitor request
 returned HTTP 503 (`Kubernetes operational data unavailable`), with inventory
 requests also returning HTTP 504. Browser login and selected-release metadata
-worked. The cause is unresolved; successful authenticated Monitor API delivery
-is not a claim that this browser gate passed.
+worked. The subsequent operational-inventory qualification below resolves this
+browser gate; the earlier failure is retained here as historical context.
 Cloud hosting and Microsoft 365 cloud ingestion remain separate unqualified
 gates; this change does not manufacture `agent_run` or claim metrics delivery.
+
+## Operational inventory latency qualification
+
+On 2026-10-14, authenticated browser measurements for both development users
+confirmed slow inventory reads and version selection. Per-row release polling
+compounded serial per-release Kubernetes GETs against client-go's default
+5-QPS limiter. Exact selection also qualified unrelated retained runtimes.
+
+The API now shares fresh namespace lists within an inventory operation and
+performs a second ConfigMap list to verify capture content/UID and identity
+ownership. Complete inventory requires nine LISTs, independently of retained
+release count; regression tests cover 1 and 20 releases, including retirement.
+Exact selection qualifies only the selected and Radius-requested active
+runtimes, while full inventory still validates all releases. Readiness,
+singleton, generation/revision, state and ownership requirements remain intact.
+There is no cross-request cache, and every streaming Monitor poll starts a fresh
+inventory scope. Interactive Kubernetes reads use bounded QPS 20 / burst 30.
+
+Agent-list responses include release summaries. The UI removes per-row polling,
+seeds playground metadata/release queries from those summaries and reuses the
+release inventory for ten seconds. Hidden A2A tabs no longer fetch or poll.
+Conversation submission still resolves and pins an exact native release;
+view selection does not declare promotion.
+
+| Measured operation | Before | After |
+| --- | --- | --- |
+| Agents API | 12.80–14.73 s | 0.40–1.22 s |
+| Editor release inventory API | 5.39–5.42 s | 0.05–0.28 s |
+| Exact editor detail API | 5.77–5.80 s | 0.06–0.31 s |
+| Browser Agents list | 14.63–14.65 s | 0.124–0.127 s |
+| Browser editor opening | 28.16–30.10 s | 0.057–0.098 s |
+| Browser version selection | 7.91–10.40 s | 0.097–1.820 s |
+
+Both users passed the explicit two-second API/interaction gate and produced
+no hidden A2A requests or browser JavaScript errors. These are bounded local
+observations, not percentile or load-test guarantees.
+Both actual editor browser Monitors displayed Live and native
+`invoke_agent editor` A365 badges. Fresh foreground/SSE invocation and peer
+trace ancestry also passed; stored/background requests remained denied.
+
+The existing host still uses its earlier Radius-owned platform installation.
+This qualification upgraded that exact chart to immutable `agent-platform`
+0.2.3 through Radius, changing only API/UI image digests and two read-only LIST
+permissions. It did not perform the separate parent-portfolio ownership handover.
+All 53 captured ConfigMap, PVC and agent StatefulSet UID/content signatures
+were unchanged. An initial browser attempt encountered an unavailable Envoy
+listener and stopped port-forward; native ingress recovered and the local
+forward was restored before the successful checks. That failed attempt is
+retained separately, not counted as a successful result.
+
+The operational API race/vet checks, all 208 UI tests, ESLint/TypeScript, SPA
+build and chart lint passed. Evidence is retained in
+`.adaptive/diagnostics/ui-latency/{before,after,retention,initial-transport-failure}.json`
+and `.adaptive/diagnostics/editor-framework/{invocation-monitor,browser}.json`.
 
 ## Pending Foundry 1:1 agent-hosting proof
 

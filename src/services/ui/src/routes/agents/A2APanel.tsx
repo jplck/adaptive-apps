@@ -15,13 +15,13 @@ import { useState } from 'react';
 import { getAgentCard, testA2ACall, validateAgentCard } from '../../api/client';
 import { useConnectivityFaultStore } from '../../state/connectivityFault';
 
-export function A2APanel({ name }: { name: string }): JSX.Element {
+export function A2APanel({ name, visible }: { name: string; visible: boolean }): JSX.Element {
   const faultEnabled = useConnectivityFaultStore((state) => state.enabled);
   const cardQuery = useQuery({
     queryKey: ['agent-card', name],
     queryFn: () => getAgentCard(name),
-    enabled: Boolean(name),
-    refetchInterval: 5_000,
+    enabled: Boolean(name) && visible,
+    refetchInterval: visible ? 5_000 : false,
   });
   const [selectedPeer, setSelectedPeer] = useState('');
   const [testMessage, setTestMessage] = useState('Say hello.');
