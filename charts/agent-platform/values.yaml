@@ -3,4 +3,5 @@ modelGateway:
 runtime: {}
 telemetry:
   enabled: false
+  retention: 168h
 keycloakService: ""

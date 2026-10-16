@@ -2,6 +2,7 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 
 REGISTRY := env_var_or_default("REGISTRY", "adaptive.local/adaptive")
 TAG := env_var_or_default("TAG", "dev")
+CONTAINER_ENGINE := env_var_or_default("CONTAINER_ENGINE", "docker")
 
 _default:
     @just --list
@@ -30,9 +31,9 @@ image COMPONENT:
       *) printf 'Unsupported native agent component: %s\n' "{{COMPONENT}}" >&2; exit 1 ;;
     esac
     if [[ "{{COMPONENT}}" == ui ]]; then
-      docker build --build-arg VITE_AUTH_ENABLED=true --build-arg VITE_KEYCLOAK_AUTHORITY="${VITE_KEYCLOAK_AUTHORITY:?Set the exact HTTPS realm issuer}" --build-arg VITE_KEYCLOAK_CLIENT_ID=adaptive-ui -t "{{REGISTRY}}/{{COMPONENT}}:{{TAG}}" "$path"
+      "{{CONTAINER_ENGINE}}" build --build-arg VITE_AUTH_ENABLED=true --build-arg VITE_KEYCLOAK_AUTHORITY="${VITE_KEYCLOAK_AUTHORITY:?Set the exact HTTPS realm issuer}" --build-arg VITE_KEYCLOAK_CLIENT_ID=adaptive-ui -t "{{REGISTRY}}/{{COMPONENT}}:{{TAG}}" "$path"
     elif [[ "{{COMPONENT}}" == dac-adapter || "{{COMPONENT}}" == platform-api ]]; then
-      docker build -t "{{REGISTRY}}/{{COMPONENT}}:{{TAG}}" "$path"
+      "{{CONTAINER_ENGINE}}" build -t "{{REGISTRY}}/{{COMPONENT}}:{{TAG}}" "$path"
     else
-      docker build -f "$path/Dockerfile" -t "{{REGISTRY}}/{{COMPONENT}}:{{TAG}}" .
+      "{{CONTAINER_ENGINE}}" build -f "$path/Dockerfile" -t "{{REGISTRY}}/{{COMPONENT}}:{{TAG}}" .
     fi

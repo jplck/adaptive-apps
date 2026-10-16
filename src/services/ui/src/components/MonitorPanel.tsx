@@ -192,6 +192,11 @@ export function appendMonitorRecord(
   current: MonitorRecord[],
   incoming: MonitorRecord,
 ): MonitorRecord[] {
+  const timestamp = (record: MonitorRecord) =>
+    Date.parse(isLog(record) ? record.time_iso : record.start_time_iso);
+  const newestFirst = (records: MonitorRecord[]) => records
+    .sort((left, right) => timestamp(right) - timestamp(left))
+    .slice(0, maxRecords);
   const duplicateIndex = current.findIndex((record) => {
     if (isLog(incoming)) {
       return isLog(record) && record.log_id === incoming.log_id;
@@ -203,7 +208,7 @@ export function appendMonitorRecord(
     );
   });
   if (duplicateIndex === -1) {
-    return [incoming, ...current].slice(0, maxRecords);
+    return newestFirst([incoming, ...current]);
   }
 
   const existing = current[duplicateIndex];
@@ -212,7 +217,7 @@ export function appendMonitorRecord(
   }
   const next = [...current];
   next[duplicateIndex] = mergeDuplicateSpans(existing, incoming);
-  return next;
+  return newestFirst(next);
 }
 
 function logResult(record: MonitorLog): { label: string; color: 'danger' | 'success' | 'warning' } {

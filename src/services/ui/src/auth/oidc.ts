@@ -76,7 +76,11 @@ export async function accessToken(): Promise<string | undefined> {
   }
 }
 
-export async function authenticatedFetch(url: string, init?: RequestInit): Promise<Response> {
+export async function authenticatedFetch(
+  url: string,
+  init?: RequestInit,
+  { invalidateSessionOnUnauthorized = true }: { invalidateSessionOnUnauthorized?: boolean } = {},
+): Promise<Response> {
   const token = authEnabled()
     ? await accessToken()
     : localStorage.getItem('adaptive.authToken') ?? import.meta.env.VITE_AUTH_TOKEN;
@@ -87,7 +91,7 @@ export async function authenticatedFetch(url: string, init?: RequestInit): Promi
   const headers = new Headers(init?.headers);
   if (token) headers.set('Authorization', `Bearer ${token}`);
   const response = await fetch(url, { ...init, headers });
-  if (response.status === 401) {
+  if (response.status === 401 && invalidateSessionOnUnauthorized) {
     if (authEnabled()) await clearSession();
     window.dispatchEvent(new CustomEvent('adaptive:unauthorized'));
   }

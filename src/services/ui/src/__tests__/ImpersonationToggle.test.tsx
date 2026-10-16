@@ -4,21 +4,24 @@ import { ImpersonationToggle } from '../components/ImpersonationToggle';
 import { renderWithProviders } from './testUtils';
 
 describe('ImpersonationToggle', () => {
-  it('explains the requested caller without promising resource delegation and reports changes', () => {
+  it('keeps the app identity control without descriptions and reports changes', () => {
     const onChange = vi.fn();
     renderWithProviders(<ImpersonationToggle value="app" onChange={onChange} allowedModes={['app', 'agentUser']} />);
 
-    expect(screen.getByRole('note')).toHaveTextContent(/Requests the agent’s own app identity/);
-    expect(screen.getByText(/downstream execution identity can differ/)).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'App' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: 'App' })).toBeEnabled();
+    expect(screen.queryByRole('note')).not.toBeInTheDocument();
+    expect(screen.queryByText(/downstream execution identity can differ/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/OBO requires connected mode/)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('radio', { name: 'Agent user' }));
     expect(onChange).toHaveBeenCalledWith('agentUser');
   });
 
-  it('updates the explainer to the selected identity', () => {
-    renderWithProviders(<ImpersonationToggle value="agentUser" onChange={() => {}} />);
-    expect(screen.getByRole('note')).toHaveTextContent(/worker identity/);
-    expect(screen.getByRole('note')).toHaveTextContent(/Keycloak mirror does not confirm Entra setup/);
+  it('keeps the selected identity without an explainer', () => {
+    renderWithProviders(<ImpersonationToggle value="agentUser" onChange={() => {}} allowedModes={['app', 'agentUser']} />);
+    expect(screen.getByRole('radio', { name: 'Agent user' })).toBeChecked();
+    expect(screen.queryByRole('note')).not.toBeInTheDocument();
   });
 
   it('disables unsupported tool identities without restricting hosted defaults', () => {
@@ -35,7 +38,7 @@ describe('ImpersonationToggle', () => {
       <ImpersonationToggle value="app" onChange={() => {}} />,
     );
     expect(screen.getByRole('radio', { name: 'On behalf of me' })).toBeDisabled();
-    expect(screen.getByText(/OBO requires connected mode/)).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'App' })).toBeEnabled();
   });
 
   it('enables approved OBO and pins every radio once started', () => {

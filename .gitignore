@@ -214,6 +214,7 @@ node_modules/
 **/obj/
 
 # Radius generated artefacts
+*.parameters.json
 .adaptive/
 charts/adaptive-apps/charts/
 radius/types.tgz

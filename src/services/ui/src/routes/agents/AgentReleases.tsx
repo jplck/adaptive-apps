@@ -31,28 +31,23 @@ export function AgentReleases({ name, agent, version, onSelect, disabled }: {
   const selected = version ?? agent?.activeVersion;
   const candidate = selected && selected !== agent?.activeVersion && selected !== agent?.requestedActiveVersion;
   return (
-    <section aria-label="Release readiness">
-      <Text block>Requested active: {agent?.requestedActiveVersion ?? '—'}</Text>
-      <Text block>Effective active: {agent?.activeVersion ?? '—'} · {agent?.phase ?? 'Unknown'}</Text>
-      {!agent?.activeVersion ? <Text block>No effective active release. Select an Available release; selection does not promote it.</Text>
-        : !agent.endpoint ? <Text block>Effective active endpoint unavailable. No release fallback.</Text> : null}
-      {candidate ? <Text block>UI-selected candidate: {selected}. No active promotion. Available candidates are ordered by release ID, not age.</Text> : null}
-      <Field label="Invocation release">
+    <section aria-label="Agent version">
+      <Field label={disabled ? 'Conversation version' : 'Version'}>
         <Select value={version ?? ''} disabled={disabled || !releases.data} onChange={(_, data) => onSelect(data.value)}>
-          <option value="">{agent?.activeVersion ? `Effective active release · ${agent.activeVersion}` : 'No effective active release'}</option>
+          <option value="">{agent?.activeVersion ? `${agent.activeVersion} · Active` : 'No active version'}</option>
           {version && !releases.data?.some((release) => release.version === version)
             ? <option value={version} disabled>{version} · unavailable</option> : null}
-          {releases.data?.map((release) => <option key={release.version} value={release.version}
+          {releases.data?.filter((release) => release.version !== agent?.activeVersion || release.version === version).map((release) => <option key={release.version} value={release.version}
             disabled={release.status !== 'Available' || !release.endpoint}>
-            {release.version} · {release.status}
+            {release.version} · {release.status}{release.active ? ' · Active' : release.requestedActive ? ' · Requested' : ''}
           </option>)}
         </Select>
       </Field>
-      <Text block>Stateless requests: earlier messages are display-only, not model context. Start a new conversation to change releases.</Text>
+      {!disabled && !agent?.activeVersion ? <Text block size={200}>No active version. Selection does not promote a release.</Text>
+        : !disabled && !agent?.endpoint ? <Text block size={200}>Selected endpoint unavailable. No release fallback.</Text> : null}
+      {!disabled && candidate ? <Text block size={200}>Candidate selected; no active promotion.</Text> : null}
+      {disabled ? <Text block size={200}>Start a new conversation to change versions. Earlier messages are display-only, not model context.</Text> : null}
       {releases.error ? <Text role="alert">Release inventory unavailable.</Text> : null}
-      {releases.data?.map((release) => <Text block key={release.version}>
-        {release.version} · {release.status}{release.requestedActive ? ' · requested' : ''}{release.active ? ' · effective' : ''}
-      </Text>)}
     </section>
   );
 }

@@ -8,6 +8,7 @@ export type ChatMessage = ChatCompletionMessage & {
   id: string;
   model?: string;
   tools?: string[];
+  error?: string;
 };
 
 export type SendChatArgs = {
@@ -69,7 +70,6 @@ export function ChatPanel({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
-  const [error, setError] = useState<string>();
   const abortRef = useRef<AbortController>();
   useEffect(() => () => abortRef.current?.abort(), []);
 
@@ -85,7 +85,6 @@ export function ChatPanel({
     const outgoing = [...messages, userMessage];
     setMessages([...outgoing, assistantMessage]);
     setDraft('');
-    setError(undefined);
     setIsStreaming(true);
 
     const controller = new AbortController();
@@ -122,7 +121,9 @@ export function ChatPanel({
           message.id === assistantMessage.id ? { ...message, tools: [...(message.tools ?? []), tool] } : message)),
       });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Message failed');
+      const error = caught instanceof Error ? caught.message : 'Message failed';
+      setMessages((current) => current.map((message) =>
+        message.id === assistantMessage.id ? { ...message, error } : message));
     } finally {
       setIsStreaming(false);
       abortRef.current = undefined;
@@ -161,6 +162,7 @@ export function ChatPanel({
               >
                 {message.content || ' '}
               </ReactMarkdown>
+              {message.error ? <div className="chat-error" role="alert">{message.error}</div> : null}
               {isStreaming && index === messages.length - 1 && message.role === 'assistant' ? (
                 <span className="streaming-cursor">▌</span>
               ) : null}
@@ -168,7 +170,6 @@ export function ChatPanel({
           ))
         )}
       </div>
-      {error ? <div className="chat-error" role="alert">{error}</div> : null}
       <form className="chat-composer" onSubmit={(event) => void submit(event)}>
         <Textarea
           aria-label={placeholder}
@@ -183,7 +184,6 @@ export function ChatPanel({
             onReset();
             setMessages([]);
             setDraft('');
-            setError(undefined);
           }}>New conversation</Button> : null}
           {isStreaming ? (
             <Button

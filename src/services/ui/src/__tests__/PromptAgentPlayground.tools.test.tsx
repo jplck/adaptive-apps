@@ -109,6 +109,14 @@ it('shows configured tools and read-only settings while preserving streamed invo
   expect(screen.getByText(/No platform identity bearer is sent/)).toBeInTheDocument();
   expect(screen.getByText(/resource delegation is not implied/)).toBeInTheDocument();
   expect(screen.getByRole('radio', { name: 'Agent user' })).toBeDisabled();
+  expect(screen.getByRole('radio', { name: 'App' })).toBeChecked();
+  expect(screen.getByRole('radio', { name: 'App' })).toBeEnabled();
+  expect(screen.queryByText(/Model calls always use application identity/)).not.toBeInTheDocument();
+  expect(screen.getAllByRole('tab')).toHaveLength(3);
+  for (const name of ['Chat', 'Monitor', 'Guardrails']) {
+    expect(screen.getByRole('tab', { name })).toBeInTheDocument();
+  }
+  expect(screen.queryByRole('tab', { name: 'A2A' })).not.toBeInTheDocument();
   expect(screen.getByLabelText('Model')).toHaveAttribute('readonly');
   expect(screen.getByLabelText('Instructions')).toHaveAttribute('readonly');
   expect(screen.queryByRole('button', { name: /save|publish|preview|connect/i })).not.toBeInTheDocument();
@@ -137,7 +145,6 @@ it('keeps app identity separate from downstream server identity and disables OBO
   expect(screen.getByText(/Downstream server workload identity — no caller delegation/)).toBeInTheDocument();
   expect(screen.getByRole('radio', { name: 'Agent user' })).toBeDisabled();
   expect(screen.getByRole('radio', { name: 'On behalf of me' })).toBeDisabled();
-  expect(screen.getByText(/OBO requires connected mode/)).toBeInTheDocument();
   expect(screen.getByText(/Downstream server workload identity — no caller delegation/)).toBeInTheDocument();
 });
 
@@ -145,7 +152,6 @@ it('does not enable worker-user invocation from captured tool modes or a Keycloa
   renderAgent([{ ...entraTool, identityModes: ['app', 'agentUser'], executionIdentity: 'caller' }]);
   await screen.findByText('azure (MCP)');
   expect(screen.getByRole('radio', { name: 'Agent user' })).toBeDisabled();
-  expect(screen.getByText(/Hosted delegation is unavailable/)).toBeInTheDocument();
   expect(screen.getByText(/resource delegation is not implied/)).toBeInTheDocument();
 });
 

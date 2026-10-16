@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM docker.io/library/node:20-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
@@ -16,7 +16,7 @@ ENV VITE_AUTH_ENABLED=${VITE_AUTH_ENABLED} \
     VITE_KEYCLOAK_CLIENT_ID=${VITE_KEYCLOAK_CLIENT_ID}
 RUN npm run build
 
-FROM nginx:alpine AS runtime
+FROM docker.io/library/nginx:alpine AS runtime
 ENV NGINX_ENVSUBST_FILTER=^POD_NAMESPACE$
 COPY nginx.conf /etc/nginx/templates/default.conf.template
 COPY --from=builder /app/dist/ /usr/share/nginx/html/

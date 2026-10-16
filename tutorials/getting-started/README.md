@@ -191,6 +191,26 @@ or port-forward mismatch.
 Native UI login is public authorization-code/S256 PKCE in realm `adaptive`;
 browser federation, Kubernetes OIDC and Agent ID blueprints are distinct.
 
+For a small single-node development machine, append
+`-f charts/adaptive-apps/overrides/small-dev.yaml` to the native bootstrap command.
+This keeps the `min-ai` portfolio but uses one Keycloak replica, sets explicit
+Keycloak/PostgreSQL CPU and memory budgets, and retains native logs/traces for
+24 hours instead of seven days. It is not a highly available configuration.
+Telemetry retention expires diagnostic records only; identity, agent state
+and model-cache retention are unchanged. Existing portfolio defaults are unchanged.
+
+The override does not cap cluster-wide memory or disk IOPS, configure WSL, or
+reduce inference resources. The pinned Qwen3-0.6B runtime still requests 6Gi RAM
+and permits 8Gi, plus one GPU. Leave room for the platform, control plane and
+host; swap is not a substitute for that budget. Pull/unpack the inference image
+and populate the retained model cache sequentially, without concurrent builds
+or image imports. Shorter telemetry retention bounds historical data, not
+instantaneous writes or strict disk usage. Keep PostgreSQL durability enabled.
+For native host K3s, configure kubelet container-log rotation at cluster creation
+to bound per-container log files (for example `container-log-max-size=10Mi` and
+`container-log-max-files=3`); these are cluster settings, not Helm values.
+Source/render tests of this override are not live capacity qualification.
+
 For the manual equivalent, use that same `ada init` input preparation, then
 ordinary commands rather than a second generator:
 

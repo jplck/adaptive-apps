@@ -22,6 +22,15 @@ onboard it or configure its Kubernetes token issuer.
 
 ## Connect the cluster
 
+On WSL, use a Linux Azure CLI installed inside the distro, not the Windows
+installation inherited through `PATH`. Check `command -v az`: a path under
+`/mnt/c/` runs on Windows, where `127.0.0.1:6443` is not necessarily the WSL
+K3s endpoint. A `[WinError 10061]` during `/version/` discovery can indicate
+this mismatch even while Linux `kubectl get nodes` succeeds. Install Azure CLI
+using Microsoft's supported Linux installation procedure, select its Linux
+executable, and authenticate in that CLI. Do not expose the API server or
+disable TLS verification to work around a client-platform mismatch.
+
 Set reviewed, non-secret identifiers and select the trusted kubeconfig:
 
 ```bash

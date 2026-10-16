@@ -1,5 +1,16 @@
 # Adaptive AI UI
 
+Playground failures appear as explicit alerts inside the assistant chat message. Native guardrail denials are
+labelled "Blocked by guardrails"; empty completed responses also report an
+error rather than leaving a blank answer. A failed turn is never replayed
+automatically. The header does not display a global guardrails marker;
+policies are captured and enforced per release, not inferred from the catalogue.
+Monitor orders records newest-first by event time, not arrival order, and
+deduplicates replayed records by their telemetry identifiers.
+Model chat/image upstream authentication failures remain visible request errors
+without clearing the browser's Keycloak session. Missing or unrefreshable
+browser credentials still require sign-in.
+
 See [native Radius agents](../../../docs/agents/native-radius.md). The UI uses
 Keycloak login and native agent/model ingress; the portfolio chart deploys it with the
 read-only operational API.
@@ -42,6 +53,11 @@ an Available requested release, otherwise the first Available endpoint-bearing
 release in lexicographic release-ID order. This is explicit UI selection, not
 promotion or a "newest release" claim. An unavailable effective release does not
 trigger fallback. All retained release IDs and readiness appear in Agents.
+Each playground has one version selector, locked after the first send until
+**New conversation**. Release readiness appears in its options rather than a
+second inventory list. Call identity retains its radio buttons without the
+explanatory paragraphs below them. Both playgrounds offer Chat, Monitor and
+Guardrails tabs; the A2A tab is removed.
 The first send pins
 the release, captured configuration and call identity. Each send uses plain-text
 input and explicit `store=false`, with no reference to a previous response.
@@ -81,8 +97,8 @@ are in `src/components/MonitorPanel.tsx`. API changes must preserve those contra
   demo fault configuration, not actual WAN connectivity. Changes are shown
   after acceptance and re-read; failures stay visible. No Pod restart,
   configuration mode switch or automatic turn replay is requested.
-- `GET /v1/tools` retains read-only catalogue behavior; A2A
-  remains a visible consumer of its existing `src/api` contracts. Unsupported
+- `GET /v1/tools` retains read-only catalogue behavior. Existing A2A API
+  contracts are unchanged, but no playground tab consumes them. Unsupported
   operations must return explicit errors, not fabricated empty/success data.
 
 Both nginx and Vite route `/v1` inventory and `/agents` native Responses through agent ingress, not directly to

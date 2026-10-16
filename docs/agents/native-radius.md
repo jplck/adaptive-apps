@@ -146,8 +146,58 @@ External production registries/archive servers use HTTPS.
 Build images through `just --justfile src/Justfile image <component>` with an
 explicit `REGISTRY`/`TAG`. A single-node K3s development cluster can import the
 selected image using `docker save <image> | sudo k3s ctr -n k8s.io images import -`.
+Register its repository-qualified digest alias with
+`sudo k3s ctr -n k8s.io images tag <image:tag> <repository>@<manifest-digest>`
+before deployment. A tag-only import may not satisfy the CRI lookup for the
+digest reference, causing an unwanted remote pull even with `IfNotPresent`.
 Capture the imported manifest digest for the authored release; do not pass a
 mutable image tag. No `agent-operator` image is built or imported.
+
+#### Docker-free image builds for host K3s
+
+K3s runs workloads with its bundled containerd. Use Podman for OCI image builds
+without installing Docker. On Ubuntu, install the build tools:
+
+```bash
+sudo apt update
+sudo apt install -y podman just
+podman info
+```
+
+From the repository root, build and import one component at a time. The
+`CONTAINER_ENGINE` override changes only the builder; Docker remains the default.
+Use fully qualified image names to avoid Podman short-name resolution prompts.
+Keep the exact UI issuer consistent with the native localhost login setup:
+
+```bash
+export CONTAINER_ENGINE=podman
+export REGISTRY=adaptive.local/adaptive TAG=dev
+export VITE_KEYCLOAK_AUTHORITY=https://localhost:8444/realms/adaptive
+mkdir -p build/images
+
+for component in ui platform-api dac-adapter governance-sidecar prompt-agent editor; do
+  just --justfile src/Justfile image "$component" || break
+  podman save --format docker-archive \
+    -o "build/images/$component.tar" "$REGISTRY/$component:$TAG" || break
+  sudo k3s ctr -n k8s.io images import "build/images/$component.tar" || break
+  digest=$(sudo k3s ctr -n k8s.io images list |
+    awk -v image="$REGISTRY/$component:$TAG" '$1 == image {print $3}')
+  [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || break
+  sudo k3s ctr -n k8s.io images tag \
+    "$REGISTRY/$component:$TAG" "$REGISTRY/$component@$digest" || break
+done
+sudo k3s ctr -n k8s.io images list
+```
+
+Stop on any failure; do not continue to `ada init` until every required image
+is built and imported. The CLI resolves imported tags to immutable containerd
+manifest digests; do not substitute Podman image/config IDs for those digests.
+`ada init` needs permission to run `sudo k3s ctr` or explicit reviewed digest
+references in `agents.json`. Importing images does not deploy containers.
+Archives and Podman's build cache consume disk in addition to containerd's
+image store; delete individual export archives only after verifying import.
+Do not build/import the large vLLM image concurrently with these builds.
+Rootless Podman must work (`podman info`) before using this workflow.
 
 For the optional private artifact servers, copy only public Terraform archives
 into the artifact PVC through its nginx Pod. Preserve the shared Terraform
@@ -308,6 +358,92 @@ Read the peer's actual identity binding before authoring `peers`: in connected
 provisioning, `agentId` is the Entra Agent ID GUID mirrored into the Keycloak
 `agent_id` claim, not the deterministic Keycloak client-name string.
 
+#### Rebuilt local writer/auditor/editor example
+
+The repository's `radius/{writer-v1,writer-v2,auditor-v1,editor-v1}.parameters.json`
+files capture this single-node `min-ai` installation's exact image manifests.
+They are installation-specific: review the namespace, environment ID, images
+and peer identity before using them elsewhere. Podman's digest can differ from
+the imported Docker archive manifest; use the containerd digest.
+Editor calls writer v2, then auditor v1. It is not writer-to-editor delegation.
+Writer v1 remains unchanged and retained.
+
+Run from the repository root after native bootstrap and browser/model checks:
+
+```bash
+export KUBECONFIG="$HOME/.kube/config"
+export ENV_ID=/planes/radius/local/resourcegroups/adaptive/providers/Applications.Core/environments/agents
+
+# On a fresh installation only, create logical agents without an active version
+# and provision their independently retained identities.
+for agent in writer auditor editor; do
+  kind=prompt
+  if [ "$agent" = editor ]; then kind=hosted; fi
+  rad deploy radius/agents.bicep --group adaptive --environment "$ENV_ID" \
+    --parameters "environment=$ENV_ID" --parameters "agentName=$agent" \
+    --parameters "kind=$kind" || break
+  rad deploy radius/agent-identity.bicep --group adaptive --environment "$ENV_ID" \
+    --parameters "environment=$ENV_ID" --parameters "agentName=$agent" || break
+done
+```
+
+Stop on failure. Do not rerun that initialization loop over promoted agents:
+its default empty `activeVersion` clears promotion intent.
+Read editor's actual identity and review `radius/editor-peers.parameters.json`;
+also preserve the same `peers` in `agents.json` for subsequent bootstrap runs.
+Bind each logical agent to its returned retained `identityRef`, then publish
+new releases:
+
+```bash
+rad deploy radius/agents-env.bicep --group adaptive --environment "$ENV_ID" \
+  --parameters @.adaptive/private/environment.parameters.json \
+  --parameters @radius/editor-peers.parameters.json
+
+for agent in auditor editor; do
+  binding=$(rad resource show Radius.Resources/agentIdentities "$agent" \
+    --group adaptive -o json |
+    python3 -c 'import json,sys; print(json.load(sys.stdin)["properties"]["identityRef"])') || break
+  kind=prompt
+  if [ "$agent" = editor ]; then kind=hosted; fi
+  rad deploy radius/agents.bicep --group adaptive --environment "$ENV_ID" \
+    --parameters "environment=$ENV_ID" --parameters "agentName=$agent" \
+    --parameters "kind=$kind" --parameters "identityRef=$binding" || break
+done
+
+for release in writer-v2 auditor-v1 editor-v1; do
+  rad deploy radius/agent-release.bicep --group adaptive --environment "$ENV_ID" \
+    --parameters "@radius/$release.parameters.json" || break
+done
+kubectl -n min-ai rollout status statefulset \
+  -l app.kubernetes.io/component=agent-release --timeout=180s
+```
+
+The writer binding is preserved from its prior qualified v1 deployment.
+For a fresh writer, bind its returned identity before publishing its first
+release. Qualify editor v1 through its explicit Responses endpoint with a
+PKCE-authenticated user and `store: false`; require both writer v2 and auditor v1
+output sections. Only after successful invocation, promote each release with
+`agents.bicep`, preserving its current identity binding:
+
+```bash
+for agent in writer auditor editor; do
+  binding=$(rad resource show Radius.Resources/agentIdentities "$agent" \
+    --group adaptive -o json |
+    python3 -c 'import json,sys; print(json.load(sys.stdin)["properties"]["identityRef"])') || break
+  kind=prompt
+  version=v1
+  if [ "$agent" = editor ]; then kind=hosted; fi
+  if [ "$agent" = writer ]; then version=v2; fi
+  rad deploy radius/agents.bicep --group adaptive --environment "$ENV_ID" \
+    --parameters "environment=$ENV_ID" --parameters "agentName=$agent" \
+    --parameters "kind=$kind" --parameters "identityRef=$binding" \
+    --parameters "activeVersion=$version" || break
+done
+```
+
+These are explicit deployments, not lifecycle reconciliation. Do not change or
+republish an existing immutable release to adjust permissions; use a new version.
+
 Optional governance supplies canonical `ProxyConfig` JSON, its SHA-256,
 `audit`/`enforce`, and the exact policy reference/content. Use the shipped
 `governance_sidecar.contracts` validation/canonicalization rather than inventing
@@ -351,6 +487,22 @@ evaluation use upstream AGT. The prebuilt AGT detection HTTP server is not a
 drop-in transparent proxy for unchanged agent images.
 
 ### Local browser access and users
+
+The rebuilt local PII example uses `radius/policies/editor-pii.json` and
+`radius/editor-pii-policy.parameters.json` with `agent-policy.bicep`.
+`writer-v3.parameters.json` and `auditor-v2.parameters.json` capture that exact
+published policy and canonical proxy configuration in enforce mode.
+Editor v2 pins those specialists, but its original image drops downstream
+error details. A subsequent editor v3 must use the corrected editor image so
+the native failure retains the guardrail denial and the playground can show
+"Blocked by guardrails". Existing immutable releases are not modified.
+Use ordinary `rad deploy radius/agent-release.bicep --parameters @<file>`
+with the exact environment/group, then qualify benign and synthetic PII
+requests before promotion. No policy-preparation service or custom policy
+lifecycle is installed: contract utilities prepare static declaration inputs,
+Radius recipes deploy them, and the existing governance sidecar enforces them.
+PII detection is bounded by the upstream detector, applies to model-bound
+input only, and does not provide output redaction or global model protection.
 
 For the single-host development configuration, discover the stock Envoy
 Service and forward only loopback ports:
@@ -476,7 +628,11 @@ owners' federated credentials and logical Agent IDs.
 The chart projects a renewable Kubernetes assertion only into LiteLLM and selects
 `WorkloadIdentityCredential`; it does not require a webhook, Azure API key or
 client secret for this gateway. The traditional LiteLLM `azure` provider uses
-the Cognitive Services token audience. This is distinct from Foundry's newer
+the Cognitive Services token audience and an account-root endpoint, for example
+`https://<account>.openai.azure.com/`. Do not append `/openai/v1`: this
+provider constructs the deployment-specific API path itself, and combining the
+two URL formats can return Azure `404 Resource not found` for an existing
+deployment. This is distinct from Foundry's newer
 `/openai/v1` SDK examples using `https://ai.azure.com/.default`; do not mix the
 provider, endpoint and audience contracts.
 See [Microsoft's keyless inference guidance](https://learn.microsoft.com/azure/ai-foundry/openai/how-to/managed-identity).
@@ -499,6 +655,121 @@ their configured reachable local member. Verify actual upstream failure,
 primary selection, streaming and recovery before claiming fallback qualification.
 Do not replay output already emitted or represent upstream denial fallback as
 transport-only policy.
+
+### Add a hybrid to an existing model application
+
+When `agent-services` already owns `local-chat` and `foundry-chat`, use
+`radius/agent-hybrid-model.bicep`. It references their actual deployment outputs
+and adds only the hybrid resource to the same application. Do not deploy
+`agent-models.bicep` over these existing models to obtain a hybrid.
+
+```bash
+rad deploy radius/agent-hybrid-model.bicep --group adaptive --environment agents \
+  --parameters environment=/planes/radius/local/resourcegroups/adaptive/providers/Applications.Core/environments/agents
+```
+
+Defaults are **cloud-first**: Foundry priority 0, local priority 1, both weight 1.
+Override the priorities explicitly for local-first routing. This separately
+authored declaration does not modify existing agent releases or their captured
+model alias. Writer/editor continue using `local-chat` until a new explicit
+release captures another alias.
+
+#### Hybrid-backed specialist releases
+
+The rebuilt installation now selects **writer v4**, **auditor v3** and
+**editor v4**. Their explicit declarations are
+`radius/writer-v4.parameters.json`, `radius/auditor-v3.parameters.json` and
+`radius/editor-v4.parameters.json`. Writer and auditor capture `hybrid-chat`;
+the unchanged hosted editor image pins their exact versioned Responses
+endpoints. Editor makes no direct model calls.
+
+`radius/policies/editor-hybrid-pii.json` and
+`radius/editor-hybrid-pii-policy.parameters.json` publish the separately
+retained `editor-hybrid-input-pii-v1` policy. It retains default-deny and the
+pre-input PII denial, allowing only the `hybrid-chat` alias. New specialist
+releases capture its canonical proxy configuration in enforce mode; the old
+local-only policy and releases remain unchanged.
+
+For this installation, deploy these explicit candidates in dependency order:
+
+```bash
+rad deploy radius/agent-policy.bicep --group adaptive --environment agents \
+  --parameters @radius/editor-hybrid-pii-policy.parameters.json
+for release in writer-v4 auditor-v3 editor-v4; do
+  rad deploy radius/agent-release.bicep --group adaptive --environment agents \
+    --parameters "@radius/$release.parameters.json" || break
+done
+```
+
+As with other explicit releases, qualify before separately promoting with
+`radius/agents.bicep`, preserving each retained `identityRef`. Do not rerun
+initial logical-agent setup or alter existing captures. These checked-in
+parameters contain installation-specific image and policy references; they
+are not portable bootstrap defaults.
+
+On 2026-10-16 all three candidates completed authenticated clean requests and
+explicitly denied synthetic PII input with cloud egress enabled and disabled.
+Editor output identified writer v4 and auditor v3 in both conditions. The
+original outage setting (enabled) was restored; no application Pod UID or
+container restart count changed during connectivity qualification. Existing
+identity and release property hashes were unchanged before promotion.
+Only after those checks were the three logical agents promoted. This uses
+the gateway's previously qualified cloud-first routing; identities remain
+local Keycloak identities, not newly provisioned Entra agent identities.
+
+After deployment, collect `configMapName` and `configDigest` from
+`rad resource show Radius.Resources/aiModels <name> --group adaptive -o json`
+for **all three models**. Set the existing portfolio's
+`agents.modelGateway.configs` to that complete list using a narrow values overlay:
+
+```json
+{
+  "agents": {
+    "modelGateway": {
+      "configs": [
+        {"name": "local-chat", "digest": "<current-local-configDigest>"},
+        {"name": "foundry-chat", "digest": "<current-cloud-configDigest>"},
+        {"name": "hybrid-chat", "digest": "<current-hybrid-configDigest>"}
+      ]
+    }
+  }
+}
+```
+
+Apply the reviewed overlay to the existing release with
+`helm upgrade min-ai charts/adaptive-apps -n min-ai --reuse-values -f <overlay>
+--wait --timeout 180s`. Do not reuse stale full bootstrap values or remove
+existing aliases. `ada init`'s generated list comes from `agents.json`; it does
+not automatically discover this separately authored hybrid. Preserve the full
+three-model mount list when subsequently updating gateway values.
+
+#### WSL live qualification, 2026-10-16
+
+The existing `min-ai` installation qualified the cloud-first `hybrid-chat`
+alias with the existing small Qwen and Foundry deployments:
+
+| Check | Observed result |
+|---|---|
+| Connected hybrid request | HTTP 200, Foundry upstream |
+| Fault enforcement | Fresh Foundry HTTPS connection and cold Storage-audience workload token mint both failed |
+| Cloud-only request during fault | `foundry-chat` failed explicitly with HTTP 500; no fallback |
+| Hybrid request during fault | HTTP 200, local Qwen upstream, about 3.1 seconds |
+| Streaming during fault | Local upstream, nonempty deltas and final `[DONE]` |
+| Fresh local login and hosted pipeline during fault | Alice PKCE login and editor v3 → writer v3 → auditor v2 succeeded |
+| PII during fault | Explicit AGT denial |
+| Recovery | Fresh cloud HTTPS and cold token mint succeeded; hybrid returned to Foundry |
+| Workload stability | All `min-ai` Pod UIDs and container restart counts unchanged during the fault |
+
+Upstream selection was verified from the gateway's
+`x-litellm-model-api-base` response header, not inferred from answer wording.
+The fault changed only `demo-cloud-egress`; its original rules were restored
+and verified after testing. Kubernetes can omit an empty `spec.egress` list
+when serializing a deny policy; restoration must handle absent and empty lists
+equivalently, with resource-version concurrency checks.
+This qualifies model fallback and local paired identity, not connected agent
+identities, arbitrary WAN failures, established-connection termination, or
+all token-cache expiry behavior. Native LiteLLM fallback semantics remain as
+documented above, including upstream authentication/permission failures.
 
 ## Connectivity and the demo button
 
@@ -722,7 +993,8 @@ inventory scope. Interactive Kubernetes reads use bounded QPS 20 / burst 30.
 
 Agent-list responses include release summaries. The UI removes per-row polling,
 seeds playground metadata/release queries from those summaries and reuses the
-release inventory for ten seconds. Hidden A2A tabs no longer fetch or poll.
+release inventory for ten seconds. The A2A playground tabs are removed and
+no longer fetch or poll.
 Conversation submission still resolves and pins an exact native release;
 view selection does not declare promotion.
 

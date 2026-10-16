@@ -87,7 +87,9 @@ it.each(['prompt', 'hosted'] as const)('pins %s release through promotion and AP
   const count = discoveryCalls;
   current = release('birch', type);
   act(() => queryClient.setQueryData(['agent', 'demo'], current));
-  expect(screen.getByText(/Conversation release/)).toHaveTextContent(type === 'prompt' ? 'amber' : 'Conversation release');
+  const selector = screen.getByLabelText('Conversation version');
+  expect(selector).toBeDisabled();
+  expect(selector).toHaveDisplayValue('amber · Active');
   if (type === 'prompt') expect(screen.getByLabelText('Instructions')).toHaveValue('amber instructions');
   outage = true;
   await send('Second');
@@ -109,6 +111,10 @@ it.each(['prompt', 'hosted'] as const)('pins %s release through promotion and AP
 
 it.each([
   ['failed', () => stream([{ type: 'response.failed', response: { error: { message: 'Tool failed' } } }]), 'Tool failed'],
+  ['guardrail block', () => stream([{ type: 'response.failed', response: { error: { message: '403 AGT deny' } } }]), 'Blocked by guardrails'],
+  ['guardrail HTTP error', () => HttpResponse.json({ error: { message: 'AGT deny', type: 'governance_error' } }, { status: 403 }), 'Blocked by guardrails'],
+  ['failed completion with policy error', () => stream([{ type: 'response.completed', response: { status: 'failed', error: { message: 'AGT deny' } } }]), 'Blocked by guardrails'],
+  ['empty completion', () => stream([completed('empty')]), 'Agent returned no response text'],
   ['error', () => stream([{ type: 'error', message: 'Native error' }]), 'Native error'],
   ['incomplete', () => stream([{ type: 'response.incomplete', response: { incomplete_details: { reason: 'max_output_tokens' } } }]), 'max_output_tokens'],
   ['truncated', () => stream([{ type: 'response.output_text.delta', delta: 'Partial output' }]), 'without response.completed'],
@@ -147,6 +153,23 @@ it('keeps cancelled turns uncertain and requires reset', async () => {
   expect(screen.getByRole('alert')).toHaveTextContent('will not be replayed');
 });
 
+it('shows a downstream guardrail block in the hosted playground', async () => {
+  server.use(
+    ...discovery(() => release('amber', 'hosted')),
+    http.post('*/agents/demo/versions/amber/responses', () => stream([
+      { type: 'response.failed', response: { error: { message: 'writer failed: 403 AGT deny' } } },
+    ])),
+  );
+  renderAgent('hosted');
+  await send('Synthetic PII');
+  expect(await screen.findByRole('alert')).toHaveTextContent('Blocked by guardrails');
+  expect(screen.getByRole('alert').closest('article')).toHaveClass('assistant');
+  expect(screen.getByRole('alert')).not.toHaveTextContent('403');
+  expect(screen.getByRole('alert')).toHaveTextContent('AGT denied this request');
+  expect(screen.getByRole('alert')).toHaveTextContent('will not be replayed');
+  expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+});
+
 it('refuses a release that becomes unavailable during initial resolution', async () => {
   let calls = 0;
   const invoke = vi.fn();
@@ -181,16 +204,16 @@ it.each(['prompt', 'hosted'] as const)('selects an explicit ready %s release wit
     }),
   );
   renderAgent(type);
-  const selector = await screen.findByLabelText('Invocation release');
+  const selector = await screen.findByLabelText('Version');
   await waitFor(() => expect(selector).toBeEnabled());
   expect(screen.getByRole('option', { name: 'not-ready · Progressing' })).toBeDisabled();
   await waitFor(() => expect(selector).toHaveValue('candidate'));
-  expect(screen.getByText(/UI-selected candidate/)).toHaveTextContent('No active promotion');
+  expect(screen.getByText(/Candidate selected/)).toHaveTextContent('no active promotion');
   await send('Independent turn');
   expect(await screen.findByText('Candidate reply')).toBeInTheDocument();
   expect(bodies).toEqual([{ input: 'Independent turn', store: false, stream: true }]);
   expect(selector).toBeDisabled();
-  expect(screen.getByText(/Stateless requests/)).toHaveTextContent('display-only');
+  expect(screen.getByText(/Start a new conversation to change versions/)).toHaveTextContent('display-only');
   await waitFor(() => expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument());
   fireEvent.click(screen.getByRole('button', { name: 'New conversation' }));
   expect(selector).toBeEnabled();

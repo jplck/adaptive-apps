@@ -45,7 +45,7 @@ export async function generateImage({
     signal,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ model, prompt, ...(size ? { size } : {}) }),
-  });
+  }, { invalidateSessionOnUnauthorized: false });
 
   if (!response.ok) {
     throw await responseError(response, 'Image generation');
@@ -90,7 +90,7 @@ export async function streamChatCompletion({
       Accept: 'text/event-stream',
     },
     body: JSON.stringify({ model, messages, stream: true }),
-  });
+  }, { invalidateSessionOnUnauthorized: false });
 
   if (!response.ok) {
     throw await responseError(response, 'Chat completion');

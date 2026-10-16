@@ -1,0 +1,21 @@
+{
+  "policies": [{
+    "apiVersion": "governance.toolkit/v1",
+    "name": "editor-hybrid-input-pii",
+    "default_action": "deny",
+    "rules": [
+      {
+        "name": "deny-pii",
+        "stage": "pre_input",
+        "condition": "pii == 'detected'",
+        "action": "deny"
+      },
+      {
+        "name": "hybrid-model",
+        "stage": "pre_input",
+        "condition": "resource == 'hybrid-chat'",
+        "action": "allow"
+      }
+    ]
+  }]
+}

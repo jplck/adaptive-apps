@@ -1,5 +1,10 @@
 # Prepare a K3s Cluster
 
+The k3d path below requires Docker and does not configure GPU passthrough.
+For native agents on a fresh WSL2 distro without Docker, use
+[host K3s with NVIDIA runtime](prepare-gpu-kaito.md#fresh-wsl2-ubuntu-host-k3s-without-docker)
+instead. That path includes small-node settings and uses K3s's bundled
+containerd; application image builds remain a separate prerequisite.
 
 1. Install k3d:
 

@@ -1,0 +1,23 @@
+# Apply alongside min-ai for a single-node development installation, not HA.
+keycloak:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+
+postgresql:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
+agents:
+  telemetry:
+    retention: 24h

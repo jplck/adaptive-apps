@@ -23,7 +23,6 @@ import { AgentInfoPanel } from '../../components/AgentInfoPanel';
 import { ChatPanel } from '../../components/ChatPanel';
 import { ImpersonationToggle } from '../../components/ImpersonationToggle';
 import { MonitorPanel } from '../../components/MonitorPanel';
-import { A2APanel } from './A2APanel';
 import { AgentGuardrails } from '../guardrails/Guardrails';
 import { useConnectivityFaultStore } from '../../state/connectivityFault';
 import { authTypeLabel, executionIdentityLabel, identityModeLabels } from '../tools/toolCatalog';
@@ -64,9 +63,6 @@ export function PromptAgentPlayground(): JSX.Element {
           </Text>
           <Badge appearance="tint">prompt</Badge>
         </div>
-        <div className="titlebar-actions">
-          <Text>{conversation.pinned ? 'Conversation release' : 'Definition version'} {agent?.version ?? '—'}</Text>
-        </div>
       </div>
       {agentQuery.isLoading ? <Spinner label="Loading agent" /> : null}
       {agentQuery.error ? <Text className="error-text">Failed to load agent.</Text> : null}
@@ -78,9 +74,7 @@ export function PromptAgentPlayground(): JSX.Element {
             allowedModes={[...allowedModes]}
             disabled={conversation.started}
           />
-          <Text size={200}>Model calls always use application identity. Graph /me requires a user;
-            app mode reports that limitation rather than impersonating a user.</Text>
-          <AgentReleases name={name} agent={agentQuery.data} version={version} disabled={conversation.started}
+          <AgentReleases name={name} agent={agent} version={version} disabled={conversation.started}
             onSelect={(selected) => setSearch((current) => {
               if (selected) current.set('version', selected);
               else current.delete('version');
@@ -160,7 +154,6 @@ export function PromptAgentPlayground(): JSX.Element {
             <Tab value="chat">Chat</Tab>
             <Tab value="monitor">Monitor</Tab>
             <Tab value="guardrails">Guardrails</Tab>
-            <Tab value="a2a">A2A</Tab>
           </TabList>
           <div hidden={tab !== 'chat'} className="tab-pane">
             <ChatPanel
@@ -178,9 +171,6 @@ export function PromptAgentPlayground(): JSX.Element {
           </div>
           <div hidden={tab !== 'guardrails'} className="tab-pane">
             <AgentGuardrails name={name} version={agent?.version ?? undefined} visible={tab === 'guardrails'} />
-          </div>
-          <div hidden={tab !== 'a2a'} className="tab-pane">
-            <A2APanel name={name} visible={tab === 'a2a'} />
           </div>
         </main>
         <aside className="playground-info">
