@@ -1,6 +1,6 @@
 import { Button, Text, Textarea } from '@fluentui/react-components';
 import { DismissRegular, SendRegular } from '@fluentui/react-icons';
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { FormEvent, memo, useEffect, useRef, useState } from 'react';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import { ChatCompletionMessage, ChatRole } from '../api/chat';
 
@@ -57,6 +57,36 @@ function makeId(): string {
 function nextMessage(role: ChatRole, content: string): ChatMessage {
   return { id: `${role}-${makeId()}`, role, content };
 }
+
+const transformMarkdownUrl = (url: string): string =>
+  /^data:image\/(png|jpe?g|gif|webp);base64,/i.test(url) ? url : defaultUrlTransform(url);
+
+const ChatMessageItem = memo(function ChatMessageItem({
+  message,
+  streaming,
+}: {
+  message: ChatMessage;
+  streaming: boolean;
+}): JSX.Element {
+  return (
+    <article className={`chat-message ${message.role}`}>
+      <div className="chat-message-header">
+        <Text weight="semibold">{message.role === 'user' ? 'You' : 'Assistant'}</Text>
+        {message.role === 'assistant' && message.model ? (
+          <Text className="chat-message-model" size={200} title={message.model}>
+            {message.model}
+          </Text>
+        ) : null}
+      </div>
+      {message.tools?.map((tool, toolIndex) => <Text key={toolIndex} size={200}>Tool call: {tool}</Text>)}
+      <ReactMarkdown urlTransform={transformMarkdownUrl}>
+        {message.content || ' '}
+      </ReactMarkdown>
+      {message.error ? <div className="chat-error" role="alert">{message.error}</div> : null}
+      {streaming ? <span className="streaming-cursor">▌</span> : null}
+    </article>
+  );
+});
 
 export function ChatPanel({
   title = 'Chat',
@@ -143,30 +173,11 @@ export function ChatPanel({
           </div>
         ) : (
           messages.map((message, index) => (
-            <article key={message.id} className={`chat-message ${message.role}`}>
-              <div className="chat-message-header">
-                <Text weight="semibold">{message.role === 'user' ? 'You' : 'Assistant'}</Text>
-                {message.role === 'assistant' && message.model ? (
-                  <Text className="chat-message-model" size={200} title={message.model}>
-                    {message.model}
-                  </Text>
-                ) : null}
-              </div>
-              {message.tools?.map((tool, toolIndex) => <Text key={toolIndex} size={200}>Tool call: {tool}</Text>)}
-              <ReactMarkdown
-                urlTransform={(url) =>
-                  /^data:image\/(png|jpe?g|gif|webp);base64,/i.test(url)
-                    ? url
-                    : defaultUrlTransform(url)
-                }
-              >
-                {message.content || ' '}
-              </ReactMarkdown>
-              {message.error ? <div className="chat-error" role="alert">{message.error}</div> : null}
-              {isStreaming && index === messages.length - 1 && message.role === 'assistant' ? (
-                <span className="streaming-cursor">▌</span>
-              ) : null}
-            </article>
+            <ChatMessageItem
+              key={message.id}
+              message={message}
+              streaming={isStreaming && index === messages.length - 1 && message.role === 'assistant'}
+            />
           ))
         )}
       </div>

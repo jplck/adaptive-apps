@@ -1,333 +1,71 @@
 import {
   Badge,
   Button,
-  DrawerBody,
-  DrawerHeader,
-  DrawerHeaderTitle,
-  OverlayDrawer,
   Text,
   ToggleButton,
 } from '@fluentui/react-components';
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { z } from 'zod';
-import { ApiError, streamAgentSpans } from '../api/client';
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import {
+  a365Operation,
+  formatAttributesLine,
+  formatDuration,
+  formatTime,
+  isLog,
+  logResult,
+  logSummary,
+  MonitorRecord,
+  SpanEvent,
+  summarizeAttributes,
+  tracePrefix,
+} from './monitor/model';
+import { RecordDetails } from './monitor/RecordDetails';
+import { useMonitorStream } from './monitor/useMonitorStream';
 
-const AttributesSchema = z.record(z.string(), z.union([z.string(), z.number(), z.boolean()]));
-type SpanAttributes = z.infer<typeof AttributesSchema>;
-
-const MonitorLogSchema = z.object({
-  type: z.literal('log'),
-  log_id: z.string(),
-  name: z.enum(['guardrail.decision', 'identity.reconciliation']),
-  trace_id: z.string(),
-  span_id: z.string(),
-  time_iso: z.string(),
-  severity: z.enum(['info', 'warning', 'error']),
-  service: z.string(),
-  attributes: AttributesSchema,
-});
-type MonitorLog = z.infer<typeof MonitorLogSchema>;
-
-const SpanSchema = z.object({
-  trace_id: z.string(),
-  span_id: z.string(),
-  parent_span_id: z.string().nullable(),
-  name: z.string(),
-  kind: z.enum(['internal', 'server', 'client', 'producer', 'consumer']),
-  start_time_iso: z.string(),
-  end_time_iso: z.string(),
-  duration_ms: z.number(),
-  status: z.enum(['unset', 'ok', 'error']),
-  status_message: z.string().nullable(),
-  service: z.string(),
-  attributes: AttributesSchema,
-  events: z.array(
-    z.object({ time_iso: z.string(), name: z.string(), attributes: AttributesSchema }),
-  ),
-});
-export type SpanEvent = z.infer<typeof SpanSchema>;
-type MonitorRecord = MonitorLog | SpanEvent;
-
-function isLog(record: MonitorRecord): record is MonitorLog {
-  return 'type' in record;
-}
+export {
+  a365Operation,
+  appendMonitorRecord,
+  formatAttributesLine,
+  summarizeAttributes,
+} from './monitor/model';
+export type { A365Operation, SpanEvent } from './monitor/model';
 
 export type MonitorPanelProps = {
   name: string;
   visible: boolean;
 };
 
-type ConnectionStatus = 'connecting' | 'live' | 'reconnecting' | 'error';
-
-const maxRecords = 200;
-
-function connectionLabel(status: ConnectionStatus): string {
-  switch (status) {
-    case 'connecting':
-      return 'Connecting';
-    case 'live':
-      return 'Live';
-    case 'reconnecting':
-      return 'Reconnecting';
-    case 'error':
-      return 'Error';
-  }
+function connectionLabel(status: 'connecting' | 'live' | 'reconnecting' | 'error'): string {
+  return status[0].toUpperCase() + status.slice(1);
 }
 
-function connectionColor(status: ConnectionStatus): 'subtle' | 'success' | 'warning' | 'danger' {
+function connectionColor(status: 'connecting' | 'live' | 'reconnecting' | 'error'): 'subtle' | 'success' | 'warning' | 'danger' {
   switch (status) {
-    case 'live':
-      return 'success';
-    case 'reconnecting':
-      return 'warning';
-    case 'error':
-      return 'danger';
-    case 'connecting':
-      return 'subtle';
+    case 'live': return 'success';
+    case 'reconnecting': return 'warning';
+    case 'error': return 'danger';
+    case 'connecting': return 'subtle';
   }
 }
 
 function spanStatusColor(status: SpanEvent['status']): 'subtle' | 'success' | 'danger' {
   switch (status) {
-    case 'ok':
-      return 'success';
-    case 'error':
-      return 'danger';
-    case 'unset':
-      return 'subtle';
+    case 'ok': return 'success';
+    case 'error': return 'danger';
+    case 'unset': return 'subtle';
   }
-}
-
-export type A365Operation = 'invoke_agent' | 'agent_run' | 'chat' | 'execute_tool';
-
-const A365_OPS: ReadonlySet<string> = new Set(['invoke_agent', 'agent_run', 'chat', 'execute_tool']);
-
-export function a365Operation(span: SpanEvent): A365Operation | null {
-  const op = span.attributes['gen_ai.operation.name'];
-  if (typeof op === 'string') {
-    if (A365_OPS.has(op)) {
-      return op as A365Operation;
-    }
-  }
-  const firstToken = span.name.split(' ', 1)[0];
-  if (A365_OPS.has(firstToken)) {
-    return firstToken as A365Operation;
-  }
-  return null;
-}
-
-function formatTime(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
-    return iso;
-  }
-
-  const hh = String(date.getHours()).padStart(2, '0');
-  const mm = String(date.getMinutes()).padStart(2, '0');
-  const ss = String(date.getSeconds()).padStart(2, '0');
-  const ms = String(date.getMilliseconds()).padStart(3, '0');
-  return `${hh}:${mm}:${ss}.${ms}`;
-}
-
-function formatDuration(durationMs: number): string {
-  return `${durationMs.toFixed(3)} ms`;
-}
-
-function tracePrefix(traceId: string): string {
-  return traceId.slice(0, 8);
-}
-
-export function summarizeAttributes(attrs: SpanAttributes): string {
-  const parts: string[] = [];
-  if (attrs['gen_ai.request.model']) {
-    parts.push(`model=${attrs['gen_ai.request.model']}`);
-  }
-  if (
-    attrs['gen_ai.usage.input_tokens'] !== undefined ||
-    attrs['gen_ai.usage.output_tokens'] !== undefined
-  ) {
-    parts.push(
-      `tokens=${attrs['gen_ai.usage.input_tokens'] ?? '?'}→${attrs['gen_ai.usage.output_tokens'] ?? '?'}`,
-    );
-  }
-  if (attrs['http.route']) {
-    parts.push(`${attrs['http.request.method'] ?? ''} ${attrs['http.route']}`.trim());
-  }
-  if (attrs['tool.name']) {
-    parts.push(`tool=${attrs['tool.name']}`);
-  }
-  return parts.join(' · ');
-}
-
-export function formatAttributesLine(attrs: SpanAttributes): string {
-  return Object.entries(attrs)
-    .map(([key, value]) => `${key}=${String(value)}`)
-    .join(' ');
-}
-
-function areParentChildDuplicates(left: SpanEvent, right: SpanEvent): boolean {
-  if (left.trace_id !== right.trace_id || left.name !== right.name) {
-    return false;
-  }
-  return left.parent_span_id === right.span_id || right.parent_span_id === left.span_id;
-}
-
-function mergeDuplicateSpans(existing: SpanEvent, incoming: SpanEvent): SpanEvent {
-  const incomingIsParent = existing.parent_span_id === incoming.span_id;
-  const existingIsParent = incoming.parent_span_id === existing.span_id;
-  const displaySpan = incomingIsParent || !existingIsParent ? incoming : existing;
-  const detailSpan = displaySpan === incoming ? existing : incoming;
-
-  return {
-    ...displaySpan,
-    attributes: {
-      ...detailSpan.attributes,
-      ...displaySpan.attributes,
-    },
-    events: [...displaySpan.events, ...detailSpan.events],
-  };
-}
-
-export function appendMonitorRecord(
-  current: MonitorRecord[],
-  incoming: MonitorRecord,
-): MonitorRecord[] {
-  const timestamp = (record: MonitorRecord) =>
-    Date.parse(isLog(record) ? record.time_iso : record.start_time_iso);
-  const newestFirst = (records: MonitorRecord[]) => records
-    .sort((left, right) => timestamp(right) - timestamp(left))
-    .slice(0, maxRecords);
-  const duplicateIndex = current.findIndex((record) => {
-    if (isLog(incoming)) {
-      return isLog(record) && record.log_id === incoming.log_id;
-    }
-    return (
-      !isLog(record) &&
-      ((record.trace_id === incoming.trace_id && record.span_id === incoming.span_id) ||
-        areParentChildDuplicates(record, incoming))
-    );
-  });
-  if (duplicateIndex === -1) {
-    return newestFirst([incoming, ...current]);
-  }
-
-  const existing = current[duplicateIndex];
-  if (isLog(existing) || isLog(incoming) || existing.span_id === incoming.span_id) {
-    return current;
-  }
-  const next = [...current];
-  next[duplicateIndex] = mergeDuplicateSpans(existing, incoming);
-  return newestFirst(next);
-}
-
-function logResult(record: MonitorLog): { label: string; color: 'danger' | 'success' | 'warning' } {
-  const identity = record.name === 'identity.reconciliation';
-  const result = String(
-    record.attributes[identity ? 'identity.result' : 'guardrail.decision'] ?? 'unknown',
-  );
-  const blocked = record.attributes['guardrail.enforced'] === true;
-  const successful = identity ? result === 'ready' : result === 'allow';
-  const failed = identity ? result === 'failed' : blocked;
-  return {
-    label: identity
-      ? result
-      : `${blocked ? 'Blocked' : successful ? 'Allowed' : 'Audit only'} · ${result}`,
-    color: failed ? 'danger' : successful ? 'success' : 'warning',
-  };
-}
-
-function logSummary(record: MonitorLog): string {
-  const attrs = record.attributes;
-  return record.name === 'identity.reconciliation'
-    ? [
-        `${attrs['identity.mode'] ?? 'unknown'} / ${attrs['identity.phase'] ?? ''}`,
-        `Entra: ${attrs['identity.entra_state'] ?? 'unknown'}`,
-        `Keycloak: ${attrs['identity.keycloak_state'] ?? 'unknown'}`,
-        attrs['identity.pending_reasons'],
-        attrs['error.type'],
-      ]
-        .filter(Boolean)
-        .join(' · ')
-    : `${attrs['guardrail.action'] ?? ''} ${attrs['guardrail.resource'] ?? ''} · ${attrs['guardrail.policy'] ?? '—'} / ${attrs['guardrail.rule'] ?? '—'} · version ${attrs['adaptive.agent.version'] || 'unversioned'}`;
 }
 
 export function MonitorPanel({ name, visible }: MonitorPanelProps): JSX.Element {
-  const [records, setRecords] = useState<MonitorRecord[]>([]);
-  const [status, setStatus] = useState<ConnectionStatus>('connecting');
   const [paused, setPaused] = useState(false);
   const [traceFilter, setTraceFilter] = useState<string | null>(null);
   const [a365Only, setA365Only] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<MonitorRecord | null>(null);
   const [detailsWidth, setDetailsWidth] = useState(560);
-  const pausedRef = useRef(paused);
-
+  const { records, setRecords, status } = useMonitorStream(name, paused);
   useEffect(() => {
-    pausedRef.current = paused;
-  }, [paused]);
-
-  useEffect(() => {
-    setRecords([]);
     setTraceFilter(null);
     setA365Only(false);
     setSelectedRecord(null);
-    setStatus('connecting');
-
-    if (!name) {
-      setStatus('error');
-      return undefined;
-    }
-
-    const controller = new AbortController();
-    let retry: ReturnType<typeof setTimeout> | undefined;
-    const receive = (event: { data: string }): void => {
-      if (controller.signal.aborted) return;
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(event.data);
-      } catch {
-        setStatus('error');
-        return;
-      }
-
-      if (pausedRef.current) {
-        return;
-      }
-
-      const record =
-        parsed && typeof parsed === 'object' && 'type' in parsed
-          ? MonitorLogSchema.safeParse(parsed)
-          : SpanSchema.safeParse(parsed);
-      if (!record.success) {
-        setStatus('error');
-        return;
-      }
-      setRecords((current) => appendMonitorRecord(current, record.data));
-    };
-
-    const connect = async (): Promise<void> => {
-      try {
-        await streamAgentSpans(name, {
-          signal: controller.signal,
-          onOpen: () => setStatus('live'),
-          onEvent: receive,
-        });
-      } catch (error) {
-        if (controller.signal.aborted) return;
-        if (error instanceof ApiError && error.status < 500) {
-          setStatus('error');
-          return;
-        }
-      }
-      if (!controller.signal.aborted) {
-        setStatus('reconnecting');
-        retry = setTimeout(() => void connect(), 3000);
-      }
-    };
-    void connect();
-    return () => {
-      controller.abort();
-      clearTimeout(retry);
-    };
   }, [name]);
 
   const displayedRecords = useMemo(() => {
@@ -353,10 +91,6 @@ export function MonitorPanel({ name, visible }: MonitorPanelProps): JSX.Element 
     setTraceFilter(null);
     setA365Only(false);
     setSelectedRecord(null);
-  };
-
-  const resizeDetails = (width: number): void => {
-    setDetailsWidth(Math.max(280, Math.min(window.innerWidth - 32, width)));
   };
 
   return (
@@ -514,154 +248,12 @@ export function MonitorPanel({ name, visible }: MonitorPanelProps): JSX.Element 
         </table>
       </div>
 
-      <OverlayDrawer
-        className="monitor-drawer"
-        style={{ width: detailsWidth, maxWidth: 'calc(100vw - 32px)' }}
-        open={Boolean(selectedRecord)}
-        position="end"
-        onOpenChange={(_, data) => {
-          if (!data.open) {
-            setSelectedRecord(null);
-          }
-        }}
-      >
-        {selectedRecord ? (
-          <>
-            <div
-              className="monitor-resize-handle"
-              role="separator"
-              aria-label="Resize telemetry details"
-              aria-orientation="vertical"
-              aria-valuemin={280}
-              aria-valuemax={Math.max(280, window.innerWidth - 32)}
-              aria-valuenow={Math.min(detailsWidth, window.innerWidth - 32)}
-              tabIndex={0}
-              onPointerDown={(event) => {
-                if (event.button === 0) {
-                  event.currentTarget.setPointerCapture(event.pointerId);
-                  event.preventDefault();
-                }
-              }}
-              onPointerMove={(event) => {
-                if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-                  resizeDetails(window.innerWidth - event.clientX);
-                }
-              }}
-              onPointerUp={(event) => {
-                if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-                  event.currentTarget.releasePointerCapture(event.pointerId);
-                }
-              }}
-              onKeyDown={(event) => {
-                const widths: Record<string, number> = {
-                  ArrowLeft: Math.min(detailsWidth, window.innerWidth - 32) + 40,
-                  ArrowRight: Math.min(detailsWidth, window.innerWidth - 32) - 40,
-                  Home: 280,
-                  End: window.innerWidth - 32,
-                };
-                if (event.key in widths) {
-                  event.preventDefault();
-                  resizeDetails(widths[event.key]);
-                }
-              }}
-            />
-            <DrawerHeader>
-              <DrawerHeaderTitle
-                action={
-                  <Button
-                    appearance="subtle"
-                    aria-label="Close telemetry details"
-                    onClick={() => setSelectedRecord(null)}
-                  >
-                    ×
-                  </Button>
-                }
-              >
-                {isLog(selectedRecord) ? 'Log details' : 'Span details'}
-              </DrawerHeaderTitle>
-            </DrawerHeader>
-            <DrawerBody>
-              <div className="monitor-detail">
-                <Text as="h3" size={500} weight="semibold">
-                  {selectedRecord.name}
-                </Text>
-                {(() => {
-                  const op = isLog(selectedRecord) ? null : a365Operation(selectedRecord);
-                  return op ? (
-                    <Badge
-                      appearance="filled"
-                      color="brand"
-                      size="medium"
-                      className="monitor-a365-mark"
-                    >
-                      Agent-365 · {op}
-                    </Badge>
-                  ) : null;
-                })()}
-                <dl className="monitor-detail-list">
-                  <dt>Trace ID</dt>
-                  <dd className="monitor-mono">{selectedRecord.trace_id || '—'}</dd>
-                  <dt>Span ID</dt>
-                  <dd className="monitor-mono">{selectedRecord.span_id || '—'}</dd>
-                  <dt>Service</dt>
-                  <dd>{selectedRecord.service}</dd>
-                  {isLog(selectedRecord) ? (
-                    <>
-                      <dt>Log ID</dt>
-                      <dd className="monitor-mono">{selectedRecord.log_id}</dd>
-                      <dt>Time</dt>
-                      <dd>{selectedRecord.time_iso}</dd>
-                      <dt>Severity</dt>
-                      <dd>{selectedRecord.severity}</dd>
-                      <dt>Result</dt>
-                      <dd>{logResult(selectedRecord).label}</dd>
-                    </>
-                  ) : (
-                    <>
-                      <dt>Parent span</dt>
-                      <dd className="monitor-mono">{selectedRecord.parent_span_id ?? '—'}</dd>
-                      <dt>Kind</dt>
-                      <dd>{selectedRecord.kind}</dd>
-                      <dt>Duration</dt>
-                      <dd>{formatDuration(selectedRecord.duration_ms)}</dd>
-                      <dt>Status</dt>
-                      <dd>{selectedRecord.status_message ?? selectedRecord.status}</dd>
-                    </>
-                  )}
-                </dl>
-
-                <Text weight="semibold">Attributes</Text>
-                <pre className="json-block">
-                  {JSON.stringify(selectedRecord.attributes, null, 2)}
-                </pre>
-
-                {!isLog(selectedRecord) ? (
-                  <>
-                    <Text weight="semibold">Events</Text>
-                    {selectedRecord.events.length > 0 ? (
-                      <ul className="monitor-event-list">
-                        {selectedRecord.events.map((spanEvent, index) => (
-                          <li key={`${spanEvent.time_iso}-${spanEvent.name}-${index}`}>
-                            <Text weight="semibold">
-                              <span className="monitor-mono">{formatTime(spanEvent.time_iso)}</span>{' '}
-                              {spanEvent.name}
-                            </Text>
-                            <pre className="json-block">
-                              {JSON.stringify(spanEvent.attributes, null, 2)}
-                            </pre>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <Text className="muted-text">No events.</Text>
-                    )}
-                  </>
-                ) : null}
-              </div>
-            </DrawerBody>
-          </>
-        ) : null}
-      </OverlayDrawer>
+      <RecordDetails
+        record={selectedRecord}
+        width={detailsWidth}
+        setWidth={setDetailsWidth}
+        onClose={() => setSelectedRecord(null)}
+      />
     </section>
   );
 }

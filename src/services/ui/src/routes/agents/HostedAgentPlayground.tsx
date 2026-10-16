@@ -1,23 +1,18 @@
-import { Badge, Button, Card, Tab, TabList, TabValue, Text } from '@fluentui/react-components';
+import { Badge, Button, Card, Text } from '@fluentui/react-components';
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { getAgent } from '../../api/client';
 import { AgentInfoPanel } from '../../components/AgentInfoPanel';
-import { ChatPanel } from '../../components/ChatPanel';
 import { ImpersonationToggle } from '../../components/ImpersonationToggle';
-import { MonitorPanel } from '../../components/MonitorPanel';
-import { AgentGuardrails } from '../guardrails/Guardrails';
 import { useConnectivityFaultStore } from '../../state/connectivityFault';
 import { useAgentConversation } from './useAgentConversation';
-import { AgentReleases } from './AgentReleases';
+import { AgentPlaygroundTabs, AgentReleaseSelector } from './AgentPlaygroundShared';
 
 export function HostedAgentPlayground(): JSX.Element {
   const { name = '' } = useParams();
   const navigate = useNavigate();
-  const [search, setSearch] = useSearchParams();
+  const [search] = useSearchParams();
   const version = search.get('version') || undefined;
-  const [tab, setTab] = useState<TabValue>('chat');
   const agentQuery = useQuery({ queryKey: version ? ['agent', name, version] : ['agent', name], queryFn: () => getAgent(name, version), enabled: Boolean(name) });
   const mode = useConnectivityFaultStore((state) => state.enabled);
   const conversation = useAgentConversation(name, 'app', mode, version);
@@ -46,12 +41,7 @@ export function HostedAgentPlayground(): JSX.Element {
               allowedModes={['app']}
             />
           </Card>
-          <AgentReleases name={name} agent={agent} version={version} disabled={conversation.started}
-            onSelect={(selected) => setSearch((current) => {
-              if (selected) current.set('version', selected);
-              else current.delete('version');
-              return current;
-            })} />
+          <AgentReleaseSelector name={name} agent={agent} disabled={conversation.started} />
           <Card appearance="filled-alternative" className="metadata-card">
             <Text weight="semibold">Hosted metadata</Text>
             <Text size={200}>Hosted-agent tools are defined in the container’s code, not attached in this playground.</Text>
@@ -71,30 +61,17 @@ export function HostedAgentPlayground(): JSX.Element {
             </dl>
           </Card>
         </aside>
-        <main className="playground-main hosted-main">
-          <TabList selectedValue={tab} onTabSelect={(_, data) => setTab(data.value)}>
-            <Tab value="chat">Chat</Tab>
-            <Tab value="monitor">Monitor</Tab>
-            <Tab value="guardrails">Guardrails</Tab>
-          </TabList>
-          <div hidden={tab !== 'chat'} className="tab-pane">
-            <ChatPanel
-              key={`${name}:${version ?? ''}`}
-              emptyTitle={agent?.name ?? 'Hosted agent'}
-              emptySubtitle={agent?.description}
-              placeholder="Message the hosted agent..."
-              onSend={conversation.send}
-              onReset={conversation.reset}
-              disabled={conversation.failed || !agent || (!conversation.pinned && (!agent.endpoint || agent.phase !== 'Ready'))}
-            />
-          </div>
-          <div hidden={tab !== 'monitor'} className="tab-pane">
-            <MonitorPanel name={name} visible={tab === 'monitor'} />
-          </div>
-          <div hidden={tab !== 'guardrails'} className="tab-pane">
-            <AgentGuardrails name={name} version={agent?.version ?? undefined} visible={tab === 'guardrails'} />
-          </div>
-        </main>
+        <AgentPlaygroundTabs
+          name={name}
+          kind="hosted"
+          version={version}
+          agent={agent}
+          placeholder="Message the hosted agent..."
+          onSend={conversation.send}
+          onReset={conversation.reset}
+          disabled={conversation.failed || !agent || (!conversation.pinned && (!agent.endpoint || agent.phase !== 'Ready'))}
+          className="hosted-main"
+        />
         <aside className="playground-info">
           <AgentInfoPanel
             identity={agent?.identity}

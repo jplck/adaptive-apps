@@ -5,9 +5,6 @@ import {
   Field,
   Input,
   Spinner,
-  Tab,
-  TabList,
-  TabValue,
   Text,
   Textarea,
 } from '@fluentui/react-components';
@@ -20,23 +17,19 @@ import {
 } from '../../api/client';
 import { useAuthStore } from '../../auth/store';
 import { AgentInfoPanel } from '../../components/AgentInfoPanel';
-import { ChatPanel } from '../../components/ChatPanel';
 import { ImpersonationToggle } from '../../components/ImpersonationToggle';
-import { MonitorPanel } from '../../components/MonitorPanel';
-import { AgentGuardrails } from '../guardrails/Guardrails';
 import { useConnectivityFaultStore } from '../../state/connectivityFault';
 import { authTypeLabel, executionIdentityLabel, identityModeLabels } from '../tools/toolCatalog';
 import { useAgentConversation } from './useAgentConversation';
-import { AgentReleases } from './AgentReleases';
+import { AgentPlaygroundTabs, AgentReleaseSelector } from './AgentPlaygroundShared';
 import { allowedIdentityModes } from './identityModes';
 
 export function PromptAgentPlayground(): JSX.Element {
   const { name = '' } = useParams();
   const navigate = useNavigate();
-  const [search, setSearch] = useSearchParams();
+  const [search] = useSearchParams();
   const version = search.get('version') || undefined;
   const agentQuery = useQuery({ queryKey: version ? ['agent', name, version] : ['agent', name], queryFn: () => getAgent(name, version), enabled: Boolean(name) });
-  const [tab, setTab] = useState<TabValue>('chat');
   const [impersonation, setImpersonation] = useState<ImpersonationMode>('app');
   const user = useAuthStore((state) => state.user);
   const mode = useConnectivityFaultStore((state) => state.enabled);
@@ -74,12 +67,7 @@ export function PromptAgentPlayground(): JSX.Element {
             allowedModes={[...allowedModes]}
             disabled={conversation.started}
           />
-          <AgentReleases name={name} agent={agent} version={version} disabled={conversation.started}
-            onSelect={(selected) => setSearch((current) => {
-              if (selected) current.set('version', selected);
-              else current.delete('version');
-              return current;
-            })} />
+          <AgentReleaseSelector name={name} agent={agent} disabled={conversation.started} />
           {unsupportedIdentity ? (
             <Text className="error-text" role="alert">
               Selected identity is unsupported by an attached Entra tool. Choose a supported call identity before invoking.
@@ -149,30 +137,16 @@ export function PromptAgentPlayground(): JSX.Element {
           </Field>
           <Text className="muted-text">Configuration is managed through Radius.</Text>
         </aside>
-        <main className="playground-main tabbed-main">
-          <TabList selectedValue={tab} onTabSelect={(_, data) => setTab(data.value)}>
-            <Tab value="chat">Chat</Tab>
-            <Tab value="monitor">Monitor</Tab>
-            <Tab value="guardrails">Guardrails</Tab>
-          </TabList>
-          <div hidden={tab !== 'chat'} className="tab-pane">
-            <ChatPanel
-              key={`${name}:${version ?? ''}`}
-              emptyTitle={agent?.name ?? 'Prompt agent'}
-              emptySubtitle={agent?.description}
-              placeholder="Message the agent..."
-              onSend={conversation.send}
-              onReset={conversation.reset}
-              disabled={invocationBlocked}
-            />
-          </div>
-          <div hidden={tab !== 'monitor'} className="tab-pane">
-            <MonitorPanel name={name} visible={tab === 'monitor'} />
-          </div>
-          <div hidden={tab !== 'guardrails'} className="tab-pane">
-            <AgentGuardrails name={name} version={agent?.version ?? undefined} visible={tab === 'guardrails'} />
-          </div>
-        </main>
+        <AgentPlaygroundTabs
+          name={name}
+          kind="prompt"
+          version={version}
+          agent={agent}
+          placeholder="Message the agent..."
+          onSend={conversation.send}
+          onReset={conversation.reset}
+          disabled={invocationBlocked}
+        />
         <aside className="playground-info">
           <AgentInfoPanel identity={agent?.identity} kind="prompt" />
         </aside>
