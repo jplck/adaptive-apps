@@ -81,6 +81,9 @@ Unknown provider metadata is displayed neutrally, not inferred as local.
 The exact response schemas are in `src/api/client.ts`; Monitor event schemas
 are in `src/components/MonitorPanel.tsx`. API changes must preserve those contracts:
 
+- The Guardrails navigation view links to Agents; policy details appear in each
+  agent playground for the selected release. The browser does not display the
+  global `GET /v1/guardrails` policies there.
 - `GET /v1/guardrails`: `enabled`, nullable `mode`, and `policies`.
 - `GET /v1/agents/{name}/guardrails?version={release}`: exact captured release,
   `enabled`, nullable `mode`, `inherited`, nullable `attached`, `policy_sha256`,
