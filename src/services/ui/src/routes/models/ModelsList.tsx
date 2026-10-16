@@ -15,7 +15,8 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Model, listModels } from '../../api/client';
+import { Model } from '../../api/client';
+import { modelsQueryOptions } from './modelQueries';
 
 function formatDate(created?: number | null): string {
   if (!created) {
@@ -80,14 +81,7 @@ function statusBadge(model: Model): JSX.Element {
 
 export function ModelsList(): JSX.Element {
   const navigate = useNavigate();
-  const modelsQuery = useQuery({
-    queryKey: ['models'],
-    queryFn: listModels,
-    // Poll while any model is still provisioning so the status/indicator goes
-    // live (Provisioning → Ready) without a manual page refresh.
-    refetchInterval: (query) =>
-      (query.state.data ?? []).some((m) => m.status === 'Provisioning') ? 5000 : false,
-  });
+  const modelsQuery = useQuery(modelsQueryOptions);
   const rows = useMemo(() => modelsQuery.data ?? [], [modelsQuery.data]);
 
   const columns: TableColumnDefinition<Model>[] = useMemo(

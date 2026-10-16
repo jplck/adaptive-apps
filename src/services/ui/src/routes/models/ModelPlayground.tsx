@@ -3,9 +3,9 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { streamChatCompletion, generateImage } from '../../api/chat';
-import { listModels } from '../../api/client';
 import { ChatPanel, SendChatArgs } from '../../components/ChatPanel';
 import { useConnectivityFaultStore } from '../../state/connectivityFault';
+import { modelsQueryOptions } from './modelQueries';
 
 type GenMode = 'chat' | 'image';
 
@@ -22,12 +22,7 @@ export function ModelPlayground(): JSX.Element {
   const navigate = useNavigate();
   const { modelId } = useParams();
   const mode = useConnectivityFaultStore((state) => state.enabled);
-  const modelsQuery = useQuery({
-    queryKey: ['models'],
-    queryFn: listModels,
-    refetchInterval: (query) =>
-      (query.state.data ?? []).some((m) => m.status === 'Provisioning') ? 5000 : false,
-  });
+  const modelsQuery = useQuery(modelsQueryOptions);
   const models = useMemo(
     () =>
       (modelsQuery.data ?? []).filter(

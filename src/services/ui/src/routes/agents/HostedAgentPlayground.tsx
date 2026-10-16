@@ -1,23 +1,18 @@
-import { Badge, Button, Card, Tab, TabList, TabValue, Text } from '@fluentui/react-components';
+import { Badge, Button, Card, Text } from '@fluentui/react-components';
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { embeddedMode } from '../../auth/config';
 import { getAgent } from '../../api/client';
 import { AgentInfoPanel } from '../../components/AgentInfoPanel';
-import { ChatPanel } from '../../components/ChatPanel';
 import { ImpersonationToggle } from '../../components/ImpersonationToggle';
-import { MonitorPanel } from '../../components/MonitorPanel';
-import { A2APanel } from './A2APanel';
-import { AgentGuardrails } from '../guardrails/Guardrails';
 import { useConnectivityFaultStore } from '../../state/connectivityFault';
 import { useAgentConversation } from './useAgentConversation';
-import { embeddedMode } from '../../auth/config';
+import { AgentPlaygroundTabs } from './AgentPlaygroundShared';
 
 export function HostedAgentPlayground(): JSX.Element {
   const embedded = embeddedMode();
   const { name = '' } = useParams();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<TabValue>('chat');
   const agentQuery = useQuery({ queryKey: ['agent', name], queryFn: () => getAgent(name), enabled: Boolean(name) });
   const mode = useConnectivityFaultStore((state) => state.enabled);
   const conversation = useAgentConversation(name, 'app', mode);
@@ -45,7 +40,6 @@ export function HostedAgentPlayground(): JSX.Element {
               onChange={() => undefined}
               allowedModes={['app']}
             />
-            <Text size={200}>Hosted delegated identity is unavailable. Use application identity.</Text>
           </Card>
           <Card appearance="filled-alternative" className="metadata-card">
             <Text weight="semibold">Hosted metadata</Text>
@@ -66,34 +60,16 @@ export function HostedAgentPlayground(): JSX.Element {
             </dl>
           </Card>
         </aside>
-        <main className="playground-main hosted-main">
-          <TabList selectedValue={tab} onTabSelect={(_, data) => setTab(data.value)}>
-            <Tab value="chat">Chat</Tab>
-            <Tab value="monitor">Monitor</Tab>
-            {!embedded ? <Tab value="guardrails">Guardrails</Tab> : null}
-            {!embedded ? <Tab value="a2a">A2A</Tab> : null}
-          </TabList>
-          <div hidden={tab !== 'chat'} className="tab-pane">
-            <ChatPanel
-              key={name}
-              emptyTitle={agent?.name ?? 'Hosted agent'}
-              emptySubtitle={agent?.description}
-              placeholder="Message the hosted agent..."
-              onSend={conversation.send}
-              onReset={conversation.reset}
-              disabled={conversation.failed || !agent || (!conversation.pinned && (!agent.endpoint || agent.phase !== 'Ready'))}
-            />
-          </div>
-          <div hidden={tab !== 'monitor'} className="tab-pane">
-            <MonitorPanel name={name} visible={tab === 'monitor'} />
-          </div>
-          {!embedded ? <div hidden={tab !== 'guardrails'} className="tab-pane">
-            <AgentGuardrails name={name} visible={tab === 'guardrails'} />
-          </div> : null}
-          {!embedded ? <div hidden={tab !== 'a2a'} className="tab-pane">
-            <A2APanel name={name} />
-          </div> : null}
-        </main>
+        <AgentPlaygroundTabs
+          name={name}
+          kind="hosted"
+          agent={agent}
+          placeholder="Message the hosted agent..."
+          onSend={conversation.send}
+          onReset={conversation.reset}
+          disabled={conversation.failed || !agent || (!conversation.pinned && (!agent.endpoint || agent.phase !== 'Ready'))}
+          className="hosted-main"
+        />
         <aside className="playground-info">
           <AgentInfoPanel
             identity={agent?.identity}

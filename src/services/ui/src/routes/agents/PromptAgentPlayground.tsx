@@ -5,9 +5,6 @@ import {
   Field,
   Input,
   Spinner,
-  Tab,
-  TabList,
-  TabValue,
   Text,
   Textarea,
 } from '@fluentui/react-components';
@@ -19,24 +16,20 @@ import {
   type ImpersonationMode,
 } from '../../api/client';
 import { useAuthStore } from '../../auth/store';
+import { embeddedMode } from '../../auth/config';
 import { AgentInfoPanel } from '../../components/AgentInfoPanel';
-import { ChatPanel } from '../../components/ChatPanel';
 import { ImpersonationToggle } from '../../components/ImpersonationToggle';
-import { MonitorPanel } from '../../components/MonitorPanel';
-import { A2APanel } from './A2APanel';
-import { AgentGuardrails } from '../guardrails/Guardrails';
 import { useConnectivityFaultStore } from '../../state/connectivityFault';
 import { authTypeLabel, executionIdentityLabel, identityModeLabels } from '../tools/toolCatalog';
 import { useAgentConversation } from './useAgentConversation';
+import { AgentPlaygroundTabs } from './AgentPlaygroundShared';
 import { allowedIdentityModes } from './identityModes';
-import { embeddedMode } from '../../auth/config';
 
 export function PromptAgentPlayground(): JSX.Element {
   const embedded = embeddedMode();
   const { name = '' } = useParams();
   const navigate = useNavigate();
   const agentQuery = useQuery({ queryKey: ['agent', name], queryFn: () => getAgent(name), enabled: Boolean(name) });
-  const [tab, setTab] = useState<TabValue>('chat');
   const [impersonation, setImpersonation] = useState<ImpersonationMode>('app');
   const user = useAuthStore((state) => state.user);
   const mode = useConnectivityFaultStore((state) => state.enabled);
@@ -63,9 +56,6 @@ export function PromptAgentPlayground(): JSX.Element {
           </Text>
           <Badge appearance="tint">prompt</Badge>
         </div>
-        <div className="titlebar-actions">
-          <Text>{conversation.pinned ? 'Conversation runtime pinned' : 'Current mutable runtime'}</Text>
-        </div>
       </div>
       {agentQuery.isLoading ? <Spinner label="Loading agent" /> : null}
       {agentQuery.error ? <Text className="error-text">Failed to load agent.</Text> : null}
@@ -77,8 +67,7 @@ export function PromptAgentPlayground(): JSX.Element {
             allowedModes={[...allowedModes]}
             disabled={conversation.started}
           />
-          <Text size={200}>Model calls always use application identity. Graph /me requires a user;
-            app mode reports that limitation rather than impersonating a user.</Text>
+          <Text>{conversation.pinned ? 'Conversation discovery snapshot; runtime may update' : 'Current mutable runtime'}</Text>
           {unsupportedIdentity ? (
             <Text className="error-text" role="alert">
               Selected identity is unsupported by an attached Entra tool. Choose a supported call identity before invoking.
@@ -141,41 +130,22 @@ export function PromptAgentPlayground(): JSX.Element {
                   <Text weight="semibold">{skill.name} (Skill)</Text>
                   <Text size={200}>{skill.path}</Text>
                   <Text>{skill.description}</Text>
-                  <Text size={200}>Configured on the current agent. Instructions load on demand; no script execution.</Text>
+                  <Text size={200}>Declared with this agent. Instructions load on demand; no script execution.</Text>
                 </Card>
               ))}
             </div>
           </Field>
           <Text className="muted-text">Configuration is managed through Radius.</Text>
         </aside>
-        <main className="playground-main tabbed-main">
-          <TabList selectedValue={tab} onTabSelect={(_, data) => setTab(data.value)}>
-            <Tab value="chat">Chat</Tab>
-            <Tab value="monitor">Monitor</Tab>
-            {!embedded ? <Tab value="guardrails">Guardrails</Tab> : null}
-            {!embedded ? <Tab value="a2a">A2A</Tab> : null}
-          </TabList>
-          <div hidden={tab !== 'chat'} className="tab-pane">
-            <ChatPanel
-              key={name}
-              emptyTitle={agent?.name ?? 'Prompt agent'}
-              emptySubtitle={agent?.description}
-              placeholder="Message the agent..."
-              onSend={conversation.send}
-              onReset={conversation.reset}
-              disabled={invocationBlocked}
-            />
-          </div>
-          <div hidden={tab !== 'monitor'} className="tab-pane">
-            <MonitorPanel name={name} visible={tab === 'monitor'} />
-          </div>
-          {!embedded ? <div hidden={tab !== 'guardrails'} className="tab-pane">
-            <AgentGuardrails name={name} visible={tab === 'guardrails'} />
-          </div> : null}
-          {!embedded ? <div hidden={tab !== 'a2a'} className="tab-pane">
-            <A2APanel name={name} />
-          </div> : null}
-        </main>
+        <AgentPlaygroundTabs
+          name={name}
+          kind="prompt"
+          agent={agent}
+          placeholder="Message the agent..."
+          onSend={conversation.send}
+          onReset={conversation.reset}
+          disabled={invocationBlocked}
+        />
         <aside className="playground-info">
           <AgentInfoPanel identity={agent?.identity} kind="prompt" />
         </aside>
