@@ -37,6 +37,10 @@ variable "model_audience" {
   type    = string
   default = "api://adaptive-model-gateway"
 }
+variable "preserve_local_actor" {
+  type    = bool
+  default = false
+}
 variable "entra" {
   type = object({
     blueprintId          = string
@@ -124,7 +128,7 @@ resource "keycloak_openid_hardcoded_claim_protocol_mapper" "agent_id" {
   client_id           = keycloak_openid_client.agent.id
   name                = "agent_id"
   claim_name          = "agent_id"
-  claim_value         = var.entra.entraClientId == "" ? local.client : var.entra.entraClientId
+  claim_value         = var.preserve_local_actor || var.entra.entraClientId == "" ? local.client : var.entra.entraClientId
   add_to_id_token     = false
   add_to_userinfo     = false
   add_to_access_token = true

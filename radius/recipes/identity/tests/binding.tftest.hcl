@@ -115,3 +115,26 @@ run "malformed_optional_id" {
   }
   expect_failures = [var.entra]
 }
+run "connected_identity_preserves_local_actor" {
+  command = plan
+  variables {
+    preserve_local_actor = true
+    entra = {
+      blueprintId          = "11111111-1111-4111-8111-111111111111"
+      blueprintObjectId    = "22222222-2222-4222-8222-222222222222"
+      blueprintPrincipalId = "33333333-3333-4333-8333-333333333333"
+      entraClientId        = "44444444-4444-4444-8444-444444444444"
+      entraObjectId        = "44444444-4444-4444-8444-444444444444"
+      ficName              = "agent-runtime"
+      entraTenantId        = "55555555-5555-4555-8555-555555555555"
+    }
+  }
+  assert {
+    condition     = keycloak_openid_hardcoded_claim_protocol_mapper.agent_id.claim_value == "adaptive-adaptive-scout"
+    error_message = "Adding cloud identity must not break retained local peer authorization."
+  }
+  assert {
+    condition     = kubernetes_service_account_v1.agent.metadata[0].annotations["azure.workload.identity/client-id"] == var.entra.blueprintId
+    error_message = "The retained ServiceAccount must receive the exact blueprint federation binding."
+  }
+}

@@ -253,6 +253,7 @@ orchestration layer.
 | `agent-services.bicep` | Explicit models and separately owned browser login |
 | `agents.bicep` | Logical agent and promotion intent; `recipes/agents/logical.bicep` |
 | `agent-identity.bicep` | Independently retained identity; `recipes/identity-{local,connected}` |
+| `agent-connected-recipe.bicep` | Opt-in connected identity recipe; preserves the existing local default and executor credential references |
 | `agent-policy.bicep` | Immutable policy; `recipes/agent-guardrails/native-policy.bicep` |
 | `agent-release.bicep` | Explicit immutable release; `recipes/agents/release.bicep` |
 
@@ -544,6 +545,71 @@ Stored/background/reference operations remain denied. Monitor uses
 authenticated streaming fetch at `/v1/agents/{name}/spans`.
 
 ### Promotion and retirement qualification
+
+#### Adding Agent ID to an existing local editor
+
+Keep the existing logical agent, retained Keycloak client, identity Secret and
+ServiceAccount. Do not create a replacement identity or overwrite a published
+release. `agent-connected-recipe.bicep` registers a named `connected` identity
+recipe using a reviewed immutable Terraform archive and exact
+tenant/provisioner/owner/sponsor/issuer inputs. Supply a fresh snapshot of the
+existing environment properties without `provisioningState`. Executor
+credentials remain secret-store references. The default local recipe and
+other model/login/agent recipe bindings are preserved.
+
+For enrichment of an existing identity, set `preserveLocalActor=true`. This
+keeps the existing Keycloak `agent_id` claim and peer authorization intact;
+the separate Entra Agent ID is used by the cloud sidecar and telemetry.
+Connectivity does not change local identity or select a different actor.
+
+Before changing the retained identity's recipe name, migrate its existing
+Terraform **module address**, not its resources. Radius wraps the default
+recipe in `module.default` and the connected recipe in `module.connected`.
+Back up the exact backend state privately and use Terraform `state mv` on a
+working copy to move `module.default` to `module.connected`. Verify the state
+lineage, outputs, resource IDs, credentials and all instance attributes are
+unchanged; Terraform may clear its dependency cache. Persist the migrated
+state with a resource-version precondition and no concurrent deployment.
+Never drop the state, import replacement credentials, or remove deletion
+protection to make the recipe switch succeed.
+
+Then deploy `agent-identity.bicep` with `identityRecipe=connected`. Verify all
+retained local resource IDs and credentials remain unchanged. The opt-in
+`connected` release recipe (`agent-release:0.4.2`) adds bounded identity-sidecar
+resources (128Mi request, 512Mi limit) without changing the existing default
+`agent-release:0.4.1`. Publish/register it before deploying a **new** release
+with `releaseRecipe=connected`; reuse the existing editor image and explicit
+specialist version pins. Promote only after live checks pass.
+
+The current Go Graph provider cannot parse OpenSSL 3's default SHA-256/PBES2
+PFX. If its certificate parser fails, repackage the same certificate/key with
+a SHA-1 PKCS#12 MAC and 3DES bag encryption for this development executor.
+Retain mode-0600 files and the original uploaded public certificate; this is
+container-format compatibility, not credential regeneration.
+
+On 2026-10-16, editor v5 was deployed and promoted with its own Entra blueprint
+and Agent ID, the unchanged editor image, and writer v4/auditor v3 pins.
+Native Terraform state migration preserved the Keycloak client, credentials,
+identity header, protocol-mapper claims and retained resource IDs. The old v4
+pipeline continued to execute. Connected v5 execution and PII blocking passed.
+The official sidecar acquired an app token whose diagnostic actor matched the
+editor Agent ID; Graph rejected delegated-only `/me` with HTTP 400 and an
+explicit delegated-flow requirement. No Graph delegated permission or M365
+business operation was granted or qualified.
+
+Live outage qualification changed only `demo-cloud-egress`. Once established
+HTTPS connections had gone idle, acquisition for an uncached cloud audience
+failed; the local editor pipeline and PII enforcement continued to work.
+Cloud acquisition recovered after restoring connectivity, then the original
+outage-ON setting was restored. Pod UIDs and restart counts were unchanged.
+The CNI preserves established HTTPS connections, so immediate token acquisition
+can still succeed after the button is enabled; cached tokens and existing
+connections are not proof of new cloud connectivity or identity fallback.
+
+The external-agent experiment was rolled back; the original API/UI images and
+local workflow were restored. Provisioner credentials and existing Entra
+registrations were retained. No external-agent invocation or diagnostics-API
+proxy is part of this editor rollout.
 
 For a logical `writer`, Radius applications are `writer-logical`,
 `writer-identity` and one `writer-<version>` per release. Author a subsequent

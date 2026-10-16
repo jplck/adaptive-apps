@@ -86,6 +86,7 @@ class NativeAgents(unittest.TestCase):
             "radius/foundry-agent.bicep",
             "radius/agents.bicep",
             "radius/agent-identity.bicep",
+            "radius/agent-connected-recipe.bicep",
             "radius/agent-release.bicep",
             "radius/agent-services.bicep",
             "radius/agent-models.bicep",
@@ -145,6 +146,22 @@ class NativeAgents(unittest.TestCase):
             text=True,
         )
         cls.resources = [obj for obj in yaml.safe_load_all(rendered) if obj]
+
+    def test_opt_in_connected_identity_and_bounded_sidecar(self):
+        identity = self.compiled["radius/agent-identity.bicep"]
+        self.assertEqual(identity["parameters"]["identityRecipe"]["defaultValue"], "default")
+        release = self.compiled["radius/agent-release.bicep"]
+        self.assertEqual(release["parameters"]["releaseRecipe"]["defaultValue"], "default")
+        connected = self.compiled["radius/agent-connected-recipe.bicep"]
+        self.assertIn("identity-connected", json.dumps(connected))
+        self.assertIn("preserve_local_actor", json.dumps(connected))
+        self.assertIn("ARM_CLIENT_CERTIFICATE", json.dumps(connected))
+        recipe = self.compiled["radius/recipes/agents/release.bicep"]
+        self.assertIn(
+            "'resources', createObject('requests', createObject('cpu', '50m', "
+            "'memory', '128Mi'), 'limits', createObject('cpu', '500m', 'memory', '512Mi'))",
+            json.dumps(recipe),
+        )
 
     def test_only_native_lifecycle_resources(self):
         release = self.compiled["radius/recipes/agents/release.bicep"]

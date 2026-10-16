@@ -66,6 +66,10 @@ variable "namespace" {
     error_message = "Select the shared native-agent namespace before creating blueprint federation."
   }
 }
+variable "preserve_local_actor" {
+  type    = bool
+  default = false
+}
 variable "tenant_id" {
   type    = string
   default = ""
@@ -218,9 +222,10 @@ resource "msgraph_resource_action" "agent" {
 }
 
 module "identity" {
-  source    = "../identity"
-  context   = var.context
-  namespace = var.namespace
+  source               = "../identity"
+  context              = var.context
+  namespace            = var.namespace
+  preserve_local_actor = var.preserve_local_actor
   entra = {
     blueprintId          = msgraph_resource_action.blueprint.output.app_id
     blueprintObjectId    = msgraph_resource_action.blueprint.output.object_id

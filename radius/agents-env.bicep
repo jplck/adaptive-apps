@@ -51,6 +51,12 @@ resource environment 'Applications.Core/environments@2023-10-01-preview' = {
           plainHttp: plainHttp
           parameters: { platform: platform, namespace: namespace }
         }
+        connected: {
+          templateKind: 'bicep'
+          templatePath: '${recipeRegistry}/agent-release:0.4.2'
+          plainHttp: plainHttp
+          parameters: { platform: platform, namespace: namespace }
+        }
       }
       'Radius.Resources/agentIdentities': {
         default: {

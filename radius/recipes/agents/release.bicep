@@ -272,6 +272,10 @@ resource workload 'apps/StatefulSet@v1' = {
           name: 'identity-sidecar'
           image: platform.sidecarImage
           env: sidecarEnv
+          resources: {
+            requests: { cpu: '50m', memory: '128Mi' }
+            limits: { cpu: '500m', memory: '512Mi' }
+          }
           securityContext: union(security, { readOnlyRootFilesystem: true })
           readinessProbe: { tcpSocket: { port: 5000 } }
           volumeMounts: [
