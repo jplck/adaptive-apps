@@ -216,6 +216,7 @@ orchestration layer.
 | `app.bicep` | Integrated trading application, retained native identities and mutable agents |
 | `agents.bicep` | Standalone reusable declaration for one retained identity and mutable agent |
 | `agent-identity.bicep` | Advanced standalone declaration for independently managing the retained identity |
+| `agent-connected-recipe.bicep` | Opt-in connected identity recipe registration, preserving other recipes and executor secret references |
 | `agent-policy.bicep` | Immutable policy; `recipes/agent-guardrails/native-policy.bicep` |
 
 Bicep composes separately owned identity and agent resources in one
@@ -427,6 +428,18 @@ Stored/background/reference operations remain denied. Monitor uses
 authenticated streaming fetch at `/v1/agents/{name}/spans`.
 
 ### Mutable update and retention qualification
+
+The optional named `connected` identity recipe adds declared Entra identity to
+local Keycloak identity; connectivity alone never selects it. Register it with
+`agent-connected-recipe.bicep` using an immutable Terraform archive and explicit
+tenant, provisioner, owner, sponsor and issuer inputs, then select it through
+`agent-identity.bicep`. `preserveLocalActor=true` preserves an existing local
+peer actor claim when enriching a retained identity.
+
+An existing installation requires a separately reviewed ownership and Terraform
+state handover before changing recipe names. Do not redeploy over an operator
+installation, recreate credentials or discard state. Historical release-based
+demo results do not qualify this mutable deployment or Foundry integration.
 
 For an integrated logical `writer`, `app.bicep` creates separately owned
 identity and agent resources while exposing one stable endpoint. Update the

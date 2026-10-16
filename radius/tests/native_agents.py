@@ -88,6 +88,8 @@ class NativeAgents(unittest.TestCase):
             "radius/foundry-agent.bicep",
             "radius/agents.bicep",
             "radius/agent-identity.bicep",
+            "radius/agent-connected-recipe.bicep",
+            "radius/agent-hybrid-model.bicep",
             "radius/agent-services.bicep",
             "radius/agent-models.bicep",
             "radius/credentials.bicep",
@@ -166,6 +168,12 @@ class NativeAgents(unittest.TestCase):
             text=True,
         )
         cls.default_resources = [obj for obj in yaml.safe_load_all(default_rendered) if obj]
+
+    def test_opt_in_connected_identity(self):
+        connected = self.compiled["radius/agent-connected-recipe.bicep"]
+        self.assertIn("identity-connected", json.dumps(connected))
+        self.assertIn("preserve_local_actor", json.dumps(connected))
+        self.assertIn("ARM_CLIENT_CERTIFICATE", json.dumps(connected))
 
     def test_only_native_lifecycle_resources(self):
         runtime = self.compiled["radius/recipes/agents/runtime.bicep"]
