@@ -716,20 +716,37 @@ textarea {
 .guardrails-panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   min-width: 0;
   overflow-x: auto;
 }
 
-.guardrails-panel > * {
-  flex-shrink: 0;
+.guardrails-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #282828;
+}
+
+.guardrails-resource {
+  min-width: 0;
+}
+
+.guardrails-resource-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 0;
 }
 
 .guardrails-table th,
 .guardrails-table td {
-  padding: 6px 8px;
+  padding: 6px;
   font-size: var(--fontSizeBase300);
-  white-space: nowrap;
+  vertical-align: top;
 }
 
 .guardrails-table-wrap {

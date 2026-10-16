@@ -47,7 +47,7 @@ describe('HostedAgentPlayground tabs', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Monitor' }));
     fireEvent.click(screen.getByRole('tab', { name: 'Guardrails' }));
-    expect(await screen.findByText('Policies: none attached')).toBeInTheDocument();
+    expect(await screen.findByText('No agent-specific policy is attached to this release.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: 'Chat' }));
 
     expect(screen.getByLabelText('Message the hosted agent...')).toHaveValue('find a beach trip');

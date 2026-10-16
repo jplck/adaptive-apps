@@ -119,7 +119,7 @@ it('shows configured tools and read-only settings while preserving streamed invo
   fireEvent.change(screen.getByLabelText('Message the agent...'), { target: { value: 'Find code' } });
   fireEvent.click(screen.getByRole('tab', { name: 'Monitor' }));
   fireEvent.click(screen.getByRole('tab', { name: 'Guardrails' }));
-  expect(await screen.findByText('Policies: none attached')).toBeInTheDocument();
+  expect(await screen.findByText('No agent-specific policy is attached to this release.')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('tab', { name: 'Chat' }));
   expect(screen.getByLabelText('Message the agent...')).toHaveValue('Find code');
   fireEvent.click(screen.getByRole('button', { name: 'Send' }));
