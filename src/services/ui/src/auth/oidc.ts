@@ -76,7 +76,11 @@ export async function accessToken(): Promise<string | undefined> {
   }
 }
 
-export async function authenticatedFetch(url: string, init?: RequestInit): Promise<Response> {
+export async function authenticatedFetch(
+  url: string,
+  init?: RequestInit,
+  { invalidateSessionOnUnauthorized = true }: { invalidateSessionOnUnauthorized?: boolean } = {},
+): Promise<Response> {
   if (embeddedMode()) {
     const headers = new Headers(init?.headers);
     headers.delete('Authorization');
@@ -92,7 +96,7 @@ export async function authenticatedFetch(url: string, init?: RequestInit): Promi
   const headers = new Headers(init?.headers);
   if (token) headers.set('Authorization', `Bearer ${token}`);
   const response = await fetch(url, { ...init, headers });
-  if (response.status === 401) {
+  if (response.status === 401 && invalidateSessionOnUnauthorized) {
     if (authEnabled()) await clearSession();
     window.dispatchEvent(new CustomEvent('adaptive:unauthorized'));
   }

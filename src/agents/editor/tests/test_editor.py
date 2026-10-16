@@ -142,6 +142,16 @@ async def test_incomplete_response_is_not_success(pipeline, status):
     assert len(pipeline[0]) == 1
 
 
+async def test_peer_guardrail_failure_preserves_block_reason(pipeline):
+    pipeline[1]["writer"] = {
+        "status": "failed",
+        "error": {"code": "server_error", "message": "403 AGT deny"},
+    }
+    with pytest.raises(ValueError, match="writer.*AGT deny"):
+        await agent.edit([Message("user", ["Brief"])])
+    assert len(pipeline[0]) == 1
+
+
 async def test_caller_executed_function_is_not_silently_ignored(pipeline):
     pipeline[1]["writer"] = {
         "output": [

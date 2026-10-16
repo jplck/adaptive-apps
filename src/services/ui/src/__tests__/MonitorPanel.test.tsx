@@ -2,6 +2,23 @@ import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { vi } from 'vitest';
 import * as api from '../api/client';
 import { a365Operation, appendMonitorRecord, MonitorPanel, SpanEvent } from '../components/MonitorPanel';
+
+it('orders out-of-order guardrail logs by event time and deduplicates replay', () => {
+  const log = (id: string, time: string) => ({
+    type: 'log' as const, log_id: id, name: 'guardrail.decision' as const,
+    trace_id: id, span_id: id, time_iso: time, severity: 'warning' as const,
+    service: 'governance-sidecar', attributes: {},
+  });
+  const newer = log('newer', '2026-10-15T15:51:55Z');
+  const older = log('older', '2026-10-15T15:36:41Z');
+  const middle = log('middle', '2026-10-15T15:42:46Z');
+  const records = [newer, older, middle].reduce(
+    (current, incoming) => appendMonitorRecord(current, incoming),
+    [] as Parameters<typeof appendMonitorRecord>[0],
+  );
+  expect(records).toEqual([newer, middle, older]);
+  expect(appendMonitorRecord(records, older)).toEqual(records);
+});
 import { renderWithProviders } from './testUtils';
 
 type MockMonitorStream = {
@@ -254,11 +271,11 @@ describe('MonitorPanel', () => {
     expect(
       Array.from(table.querySelectorAll('.monitor-name-cell')).map((cell) => cell.textContent),
     ).toEqual([
-      'A365 · invoke_agentinvoke_agent',
       'identity.reconciliation',
       'guardrail.decision',
       'identity.reconciliation',
       'identity.reconciliation',
+      'A365 · invoke_agentinvoke_agent',
     ]);
     expect(screen.getByText('ready')).toBeInTheDocument();
     expect(screen.getByText('pending')).toBeInTheDocument();
@@ -466,7 +483,9 @@ describe('MonitorPanel', () => {
     expect(container.querySelectorAll('.monitor-row')).toHaveLength(2);
     fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
     act(() =>
-      source.emitMessage(JSON.stringify(baseSpan({ span_id: 'chat', name: 'chat model' }))),
+      source.emitMessage(JSON.stringify(baseSpan({
+        span_id: 'chat', name: 'chat model', start_time_iso: '2026-10-05T13:31:01Z',
+      }))),
     );
     fireEvent.click(screen.getByRole('button', { name: /A365 only/ }));
     expect(screen.getByTitle('identity.reconciliation')).toBeInTheDocument();

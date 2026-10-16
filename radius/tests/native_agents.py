@@ -13,6 +13,63 @@ ROOT = Path(__file__).resolve().parents[2]
 COMPILER = os.environ.get("BICEP", str(Path.home() / ".rad/bin/bicep"))
 
 
+class SmallDevelopmentChart(unittest.TestCase):
+    def render(self, small):
+        args = [
+            "helm", "template", "small", str(ROOT / "charts/adaptive-apps"),
+            "-f", str(ROOT / "charts/adaptive-apps/profiles/min-ai.yaml"),
+            "--set", "features.agents.enabled=true",
+            "--set", "agents.telemetry.enabled=true",
+        ]
+        if small:
+            args += ["-f", str(ROOT / "charts/adaptive-apps/overrides/small-dev.yaml")]
+        return [obj for obj in yaml.safe_load_all(
+            subprocess.check_output(args, text=True)
+        ) if obj]
+
+    def test_small_override_and_unchanged_defaults(self):
+        for small in [False, True]:
+            with self.subTest(small=small):
+                objects = self.render(small)
+                keycloak = next(obj for obj in objects if obj["kind"] == "Deployment"
+                                and obj["metadata"]["name"] == "small-keycloak")
+                self.assertEqual(keycloak["spec"]["replicas"], 1 if small else 2)
+                container = keycloak["spec"]["template"]["spec"]["containers"][0]
+                postgres = next(obj for obj in objects if obj["kind"] == "StatefulSet"
+                                and obj["metadata"]["name"] == "small-keycloak-postgresql")
+                database = postgres["spec"]["template"]["spec"]["containers"][0]
+                if small:
+                    self.assertEqual(container["resources"], {
+                        "requests": {"cpu": "250m", "memory": "512Mi"},
+                        "limits": {"cpu": "1", "memory": "2Gi"},
+                    })
+                    self.assertEqual(database["resources"], {
+                        "requests": {"cpu": "100m", "memory": "256Mi"},
+                        "limits": {"cpu": "1", "memory": "512Mi"},
+                    })
+                else:
+                    self.assertNotIn("resources", container)
+                    self.assertNotIn("resources", database)
+                self.assertIn("volumeClaimTemplates", postgres["spec"])
+                retention = "24h" if small else "168h"
+                config = next(obj for obj in objects if obj["kind"] == "ConfigMap"
+                              and obj["metadata"]["name"] == "adaptive-telemetry")
+                loki = yaml.safe_load(config["data"]["loki.yaml"])
+                self.assertEqual(loki["limits_config"]["retention_period"], retention)
+                self.assertEqual(loki["limits_config"]["max_query_lookback"], retention)
+                self.assertTrue(loki["ingester"]["wal"]["enabled"])
+                traces = next(obj for obj in objects if obj["kind"] == "StatefulSet"
+                              and obj["metadata"]["name"] == "adaptive-traces")
+                env = traces["spec"]["template"]["spec"]["containers"][0]["env"]
+                self.assertEqual(next(item["value"] for item in env
+                                      if item["name"] == "BADGER_SPAN_STORE_TTL"), retention)
+                for name in ["adaptive-traces", "adaptive-logs"]:
+                    store = next(obj for obj in objects if obj["kind"] == "StatefulSet"
+                                 and obj["metadata"]["name"] == name)
+                    self.assertEqual(store["spec"]["persistentVolumeClaimRetentionPolicy"],
+                                     {"whenDeleted": "Retain", "whenScaled": "Retain"})
+
+
 class NativeAgents(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

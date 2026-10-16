@@ -97,6 +97,10 @@ it.each(['prompt', 'hosted'] as const)('pins the %s runtime through updates and 
 
 it.each([
   ['failed', () => stream([{ type: 'response.failed', response: { error: { message: 'Tool failed' } } }]), 'Tool failed'],
+  ['guardrail block', () => stream([{ type: 'response.failed', response: { error: { message: '403 AGT deny' } } }]), 'Blocked by guardrails'],
+  ['guardrail HTTP error', () => HttpResponse.json({ error: { message: 'AGT deny', type: 'governance_error' } }, { status: 403 }), 'Blocked by guardrails'],
+  ['failed completion with policy error', () => stream([{ type: 'response.completed', response: { status: 'failed', error: { message: 'AGT deny' } } }]), 'Blocked by guardrails'],
+  ['empty completion', () => stream([completed('empty')]), 'Agent returned no response text'],
   ['error', () => stream([{ type: 'error', message: 'Native error' }]), 'Native error'],
   ['incomplete', () => stream([{ type: 'response.incomplete', response: { incomplete_details: { reason: 'max_output_tokens' } } }]), 'max_output_tokens'],
   ['truncated', () => stream([{ type: 'response.output_text.delta', delta: 'Partial output' }]), 'without response.completed'],

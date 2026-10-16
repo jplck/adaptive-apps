@@ -460,7 +460,7 @@ export async function invokeAgent(
     signal,
     headers,
     body: JSON.stringify(body),
-  });
+  }, { invalidateSessionOnUnauthorized: false });
 
   if (!response.ok) {
     throw await responseError(response, 'Agent invocation');

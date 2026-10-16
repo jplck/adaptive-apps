@@ -4,7 +4,7 @@ COPY services/governance-sidecar ./services/governance-sidecar
 WORKDIR /workspace/services/governance-sidecar
 RUN uv sync --frozen --no-dev --no-editable
 
-FROM python:3.12-slim
+FROM docker.io/library/python:3.12-slim
 ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 WORKDIR /app
 COPY --from=builder /workspace/services/governance-sidecar/.venv /app/.venv

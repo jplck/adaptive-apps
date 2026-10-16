@@ -73,6 +73,7 @@ export function useAgentConversation(name: string, impersonation: ImpersonationM
       signal.throwIfAborted();
       assertCaller();
       let completedId: string | undefined;
+      let receivedText = false;
       await invokeAgent(current.agent.endpoint!, {
         input: prompt,
         store: false,
@@ -103,14 +104,17 @@ export function useAgentConversation(name: string, impersonation: ImpersonationM
               ?? value.response?.incomplete_details?.reason ?? `Native response failed: ${type}`);
           }
           if (completedId) throw new Error('Unexpected event after native completion.');
-          if (type === 'response.output_text.delta' && typeof value.delta === 'string') onDelta(value.delta);
+          if (type === 'response.output_text.delta' && typeof value.delta === 'string') {
+            receivedText ||= Boolean(value.delta.trim());
+            onDelta(value.delta);
+          }
           if (value.response?.model) onModel(value.response.model);
           if (type === 'response.output_item.added' && value.item?.type?.includes('call')) {
             onToolEvent?.(value.item.name ?? value.item.type);
           }
           if (type === 'response.completed') {
             if (value.response?.status !== 'completed' || !value.response.id) {
-              throw new Error('Invalid native response completion.');
+              throw new Error(value.response?.error?.message ?? 'Invalid native response completion.');
             }
             completedId = value.response.id;
           }
@@ -118,12 +122,16 @@ export function useAgentConversation(name: string, impersonation: ImpersonationM
       });
       signal.throwIfAborted();
       if (!completedId) throw new Error('Native stream ended without response.completed; the turn outcome is uncertain.');
+      if (!receivedText) throw new Error('Agent returned no response text. The request may have failed downstream; check Monitor for details.');
     } catch (error) {
       if (conversation.current) conversation.current.failed = true;
       setFailed(true);
       const reason = signal.aborted ? 'Turn cancelled; tool effects may already have occurred.'
         : error instanceof Error ? error.message : 'Native response failed.';
-      throw new Error(`${reason} Start a new conversation; this turn will not be replayed.`);
+      const message = /\bAGT deny\b|governance_error|guardrail.*block/i.test(reason)
+        ? 'Blocked by guardrails: AGT denied this request under the attached protection policy.'
+        : reason;
+      throw new Error(`${message} Start a new conversation; this turn will not be replayed.`);
     }
   };
 

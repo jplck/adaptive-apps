@@ -99,7 +99,8 @@ async def edit(messages: list[Message]) -> AgentResponse:
             in ("function_call", "custom_tool_call", "computer_call", "mcp_approval_request")
             for item in result.output
         ):
-            raise ValueError(f"{name} did not complete foreground execution")
+            detail = result.error.message if result.error else "No completed response"
+            raise ValueError(f"{name} did not complete foreground execution: {detail}")
         if not result.output_text.strip():
             raise ValueError(f"{name} returned no editing result")
         outputs.append(f"## {name}\n\n{result.output_text}")

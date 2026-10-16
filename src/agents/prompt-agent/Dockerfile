@@ -10,7 +10,7 @@ COPY agents/prompt-agent/src ./agents/prompt-agent/src
 WORKDIR /workspace/agents/prompt-agent
 RUN uv sync --frozen --no-dev --no-editable
 
-FROM python:3.12-slim AS runtime
+FROM docker.io/library/python:3.12-slim AS runtime
 
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \

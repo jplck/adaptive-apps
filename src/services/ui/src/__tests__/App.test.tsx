@@ -12,6 +12,7 @@ describe('App', () => {
 
     expect(await screen.findByText('qwen2.5-7b-instruct')).toBeInTheDocument();
     expect(screen.getByText('Adaptive AI')).toBeInTheDocument();
+    expect(screen.queryByText(/Global policies:/)).not.toBeInTheDocument();
     const links = within(screen.getByRole('navigation', { name: 'Primary' })).getAllByRole('link');
     expect(links.map((link) => link.textContent)).toEqual(['Agents', 'Tools', 'Models', 'Guardrails']);
     expect(screen.queryByText(/evaluation/i)).not.toBeInTheDocument();

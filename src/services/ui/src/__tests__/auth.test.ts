@@ -7,6 +7,7 @@ import { oidcSettings } from '../auth/config';
 import { accessToken, authenticatedFetch, beginLogin, clearSession, completeCallback, logout } from '../auth/oidc';
 import { useAuthStore } from '../auth/store';
 import { server } from '../mocks/server';
+import { generateImage, streamChatCompletion } from '../api/chat';
 
 const authority = 'https://identity.example/realms/adaptive';
 
@@ -123,6 +124,28 @@ describe('native Keycloak login', () => {
 });
 
 describe('authenticated requests', () => {
+  it.each(['chat', 'image'])('keeps model %s authentication errors as request failures without signing out', async (kind) => {
+    vi.spyOn(UserManager.prototype, 'getUser').mockResolvedValue(user());
+    const remove = vi.spyOn(UserManager.prototype, 'removeUser').mockResolvedValue();
+    const unauthorized = vi.fn();
+    window.addEventListener('adaptive:unauthorized', unauthorized);
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(
+      JSON.stringify({ error: { message: 'Cloud workload identity rejected' } }),
+      { status: 401, headers: { 'Content-Type': 'application/json' } },
+    ));
+    try {
+      const request = kind === 'chat'
+        ? streamChatCompletion({ model: 'foundry-chat', messages: [], onDelta: vi.fn() })
+        : generateImage({ model: 'foundry-image', prompt: 'A landscape' });
+      await expect(request).rejects.toThrow('Cloud workload identity rejected');
+      expect(fetchMock).toHaveBeenCalledOnce();
+      expect(remove).not.toHaveBeenCalled();
+      expect(unauthorized).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener('adaptive:unauthorized', unauthorized);
+    }
+  });
+
   it('shares one refresh across concurrent requests and uses the renewed bearer', async () => {
     vi.spyOn(UserManager.prototype, 'getUser').mockResolvedValue(user(-1));
     let finish!: (value: User) => void;
@@ -172,6 +195,19 @@ describe('authenticated requests', () => {
     finish(user());
     await rejected;
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('preserves the browser session when a model upstream rejects its credentials', async () => {
+    vi.spyOn(UserManager.prototype, 'getUser').mockResolvedValue(user());
+    const remove = vi.spyOn(UserManager.prototype, 'removeUser').mockResolvedValue();
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status: 401 }));
+    useAuthStore.setState({ status: 'authenticated' });
+    const response = await authenticatedFetch('/models/v1/chat/completions',
+      { method: 'POST', body: '{}' }, { invalidateSessionOnUnauthorized: false });
+    expect(response.status).toBe(401);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(remove).not.toHaveBeenCalled();
+    expect(useAuthStore.getState().status).toBe('authenticated');
   });
 
   it('clears a rejected session without replaying a mutation', async () => {

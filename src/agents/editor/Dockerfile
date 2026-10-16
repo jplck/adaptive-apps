@@ -5,7 +5,7 @@ COPY agents/editor/pyproject.toml agents/editor/uv.lock agents/editor/README.md 
 COPY agents/editor/src ./src
 RUN uv sync --frozen --no-dev --no-editable
 
-FROM python:3.12-slim
+FROM docker.io/library/python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PATH="/app/.venv/bin:${PATH}"
 WORKDIR /app
 COPY --from=builder /workspace/agents/editor/.venv /app/.venv

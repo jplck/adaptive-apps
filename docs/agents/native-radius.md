@@ -82,20 +82,6 @@ accepted/programmed ingress and exact Radius ownership. An unready update does
 not produce a success-shaped endpoint and there is no release fallback.
 Monitor reads bounded native Jaeger/Loki records, not manufactured events.
 
-Native Responses host traces use the SDK's signal-specific
-`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`: localhost `a365-collector` forwards them
-to the central collector and Jaeger. The stock per-agent collector supplies
-declared agent identity and, when connected, tenant/blueprint attributes without
-changing span names, operation names or parent relationships. Logs and metrics
-retain their central SDK endpoint. The sidecar has bounded in-memory retry,
-not durable replay.
-
-This local Monitor path does not establish Microsoft 365 cloud ingestion:
-the old operator's separate authenticated A365 export branch is not implemented
-in this capability. Cloud registration, permissions, licensing and delivery
-remain separate gates; disabling the SDK's direct cloud exporter prevents
-accidental duplicate or unqualified exports.
-
 ## Delivery
 
 Use an isolated cluster for first qualification. Kubernetes 1.33+ with
@@ -243,7 +229,7 @@ or platform resources owned by the mutable workload.
    `rad resource-type create --from-file radius/resource-types/types.yaml`.
    Generate its existing extension:
    `rad bicep publish-extension --from-file radius/resource-types/types.yaml --target radius/types.tgz`.
-2. Publish `agents` at `0.6.1`, `agent-guardrails` at `0.3.0`,
+2. Publish `agents` at `0.5.0`, `agent-guardrails` at `0.3.0`,
    `ai-models` at `0.5.2` and `ai-gateways` at `0.2.0`, using
    `rad bicep publish`.
    Their files are `recipes/agents/logical.bicep` (which includes the internal
@@ -326,11 +312,6 @@ Platform recipe bindings are `policyServiceImage`, `strictResponses`,
 digests. Local peer identities may use `{namespace}` in `keycloakClientId` and
 `agentId`; `ada init` resolves it to the selected namespace. `ingressUrl` is the
 public client origin, not an internal DNS name.
-The runtime NetworkPolicy uses the shared portfolio's
-`app.kubernetes.io/component=keycloak` selector by default. For an existing
-Keycloak deployment with different labels, supply its exact
-`keycloakPodSelector` once in the environment; a Service URL alone cannot
-identify the NetworkPolicy's target Pods.
 Model-gateway chart values require an exact issuer/JWKS URL and explicit
 per-agent Keycloak client allowlist. Connected Azure models use the gateway's
 own federated workload identity; no Azure API key is introduced. Public OpenAI
@@ -375,13 +356,6 @@ Optional governance supplies canonical `ProxyConfig` JSON, its SHA-256,
 a second policy format. Default-deny policies are enforced by the locked AGT
 sidecar without modifying agent code. Unsupported policies fail readiness;
 the catalogue alone is not proof of runtime enforcement.
-
-Platform-scoped policies are not automatically attached or reapplied by this
-operator-free capability. Governance must be explicitly captured in a release
-declaration. Shared model ingress currently routes directly to the model gateway,
-without a global AGT enforcement hop. Consequently, publishing a global PII
-policy does not protect every agent or UI model call. Current proxy stages are
-`pre_input` and `pre_tool`; output filtering/redaction is not implemented.
 
 Deploy policies independently through `radius/agent-policy.bicep`, passing
 `environment`, `policyName`, canonical `policyContent` and `policyDigest`.
@@ -731,119 +705,13 @@ Read-only Jaeger inspection later on 2026-10-13 confirmed that the shared
 collector receives actual SDK spans under the correct release service names.
 Prompt traces contain `invoke_agent writer` with a child `chat local-chat`, and
 hosted-to-prompt calls preserve the trace and parent IDs. They do not contain
-the originally specified intermediate `agent_run` span. Microsoft's current
-[direct A365 contract](https://learn.microsoft.com/microsoft-agent-365/developer/direct-open-telemetry-integration#message-contracts)
-accepts `invoke_agent`, `chat`, `execute_tool` and `output_messages`, not
-`agent_run`. The old three-level requirement therefore remains a specification
-decision, not evidence that the collector lost a supported A365 operation.
-Do not manufacture or rename spans to pass that gate.
-The min-ai collector also has no metrics pipeline, while
+the required intermediate `agent_run` span. This is a native instrumentation
+shape gap, not absent collector delivery; do not manufacture or rename spans
+to pass the gate. The min-ai collector also has no metrics pipeline, while
 the image's SDK emits metrics, producing explicit HTTP 404 export errors.
 After CPU-model retirement, the isolated setup's old gateway configuration
 still references the removed CPU backend; it is not a currently qualified
 inference installation. The host cluster's GPU/Foundry proof remains separate.
-
-On 2026-10-14, `agent-release:0.4.1` restored the stock per-agent trace collector
-in the original host cluster through new Radius `otel-v2` releases. The prompt
-and hosted agent image digests were unchanged. Both users completed prompt and
-hosted peer invocation; writer SSE and stored/background denials also passed.
-The authenticated Monitor stream returned 28 native spans from those requests,
-with exact agent/version/tenant/blueprint attributes and preserved peer trace
-IDs. Actual browser Monitor sessions for both users displayed the live
-`invoke_agent` and `chat` A365 badges. All 13 pre-existing
-logical/identity/release captures and PVCs retained
-their UIDs and immutable content. The ready `otel-v2` releases were then
-explicitly selected through Radius.
-
-The `otel-v2` hosted editor emitted HTTP spans, not its own `invoke_agent`:
-its writer/auditor peers emit native `invoke_agent` and `chat` spans in the same
-trace. That instrumentation limitation is separate from the repaired delivery
-path. Neither an intermediate `agent_run` nor cloud A365 ingestion is claimed.
-Evidence is retained in
-`.adaptive/diagnostics/a365-delivery/{invocation-monitor,retention,browser}.json`.
-
-On 2026-10-14, the editor's new `af-v1` release replaced that instrumentation
-limitation with Agent Framework's native `AgentTelemetryLayer`. The pipeline
-still calls writer then auditor through OpenAI-compatible Responses clients
-and DAC, with explicit `otel-v2` peer versions. It has no Foundry project client,
-new LLM, workflow engine, handwritten span or propagation hook. SDK-managed
-HTTPX instrumentation propagates the real editor invocation context. The editor
-image was rebuilt and pinned to OCI digest
-`sha256:05cc88a5d1cb050e38077ba781614230949c699f71d72e441125817cbad69fb0`;
-writer/auditor images and previous release declarations were not changed.
-
-Real foreground calls for both users and an editor streaming call delivered
-`invoke_agent editor` with child peer HTTP calls, native peer `invoke_agent`
-and their child `chat` spans to the authenticated Monitor. Exact trace ancestry
-and agent/version/tenant/blueprint metadata were verified; the editor itself
-does not call a model or execute a tool. Stored/background execution remained
-denied. The ready editor release was explicitly selected through Radius, and
-all 25 previous captures/PVCs retained exact UIDs and immutable content.
-All 34 editor tests, Ruff checks and strict mypy passed, including real OTLP
-export, cross-task streaming and foreground/streaming error reporting.
-Evidence is retained in
-`.adaptive/diagnostics/editor-framework/{workload,invocation-monitor,retention}.json`.
-Initial hosted-editor browser Monitor qualification did not pass: the Monitor request
-returned HTTP 503 (`Kubernetes operational data unavailable`), with inventory
-requests also returning HTTP 504. Browser login and selected-release metadata
-worked. The subsequent operational-inventory qualification below resolves this
-browser gate; the earlier failure is retained here as historical context.
-Cloud hosting and Microsoft 365 cloud ingestion remain separate unqualified
-gates; this change does not manufacture `agent_run` or claim metrics delivery.
-
-## Operational inventory latency qualification
-
-On 2026-10-14, authenticated browser measurements for both development users
-confirmed slow inventory reads and version selection. Per-row release polling
-compounded serial per-release Kubernetes GETs against client-go's default
-5-QPS limiter. Exact selection also qualified unrelated retained runtimes.
-
-The API now shares fresh namespace lists within an inventory operation and
-performs a second ConfigMap list to verify capture content/UID and identity
-ownership. Complete inventory requires nine LISTs, independently of retained
-release count; regression tests cover 1 and 20 releases, including retirement.
-Exact selection qualifies only the selected and Radius-requested active
-runtimes, while full inventory still validates all releases. Readiness,
-singleton, generation/revision, state and ownership requirements remain intact.
-There is no cross-request cache, and every streaming Monitor poll starts a fresh
-inventory scope. Interactive Kubernetes reads use bounded QPS 20 / burst 30.
-
-Agent-list responses include release summaries. The UI removes per-row polling,
-seeds playground metadata/release queries from those summaries and reuses the
-release inventory for ten seconds. Hidden A2A tabs no longer fetch or poll.
-Conversation submission still resolves and pins an exact native release;
-view selection does not declare promotion.
-
-| Measured operation | Before | After |
-| --- | --- | --- |
-| Agents API | 12.80–14.73 s | 0.40–1.22 s |
-| Editor release inventory API | 5.39–5.42 s | 0.05–0.28 s |
-| Exact editor detail API | 5.77–5.80 s | 0.06–0.31 s |
-| Browser Agents list | 14.63–14.65 s | 0.124–0.127 s |
-| Browser editor opening | 28.16–30.10 s | 0.057–0.098 s |
-| Browser version selection | 7.91–10.40 s | 0.097–1.820 s |
-
-Both users passed the explicit two-second API/interaction gate and produced
-no hidden A2A requests or browser JavaScript errors. These are bounded local
-observations, not percentile or load-test guarantees.
-Both actual editor browser Monitors displayed Live and native
-`invoke_agent editor` A365 badges. Fresh foreground/SSE invocation and peer
-trace ancestry also passed; stored/background requests remained denied.
-
-The existing host still uses its earlier Radius-owned platform installation.
-This qualification upgraded that exact chart to immutable `agent-platform`
-0.2.3 through Radius, changing only API/UI image digests and two read-only LIST
-permissions. It did not perform the separate parent-portfolio ownership handover.
-All 53 captured ConfigMap, PVC and agent StatefulSet UID/content signatures
-were unchanged. An initial browser attempt encountered an unavailable Envoy
-listener and stopped port-forward; native ingress recovered and the local
-forward was restored before the successful checks. That failed attempt is
-retained separately, not counted as a successful result.
-
-The operational API race/vet checks, all 208 UI tests, ESLint/TypeScript, SPA
-build and chart lint passed. Evidence is retained in
-`.adaptive/diagnostics/ui-latency/{before,after,retention,initial-transport-failure}.json`
-and `.adaptive/diagnostics/editor-framework/{invocation-monitor,browser}.json`.
 
 ## Pending Foundry 1:1 agent-hosting proof
 
