@@ -1,0 +1,7 @@
+modelGateway:
+  configs: []
+  cloudEgress: false
+runtime: {}
+telemetry:
+  enabled: false
+keycloakService: ""
