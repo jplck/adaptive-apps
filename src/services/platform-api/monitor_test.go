@@ -22,9 +22,11 @@ import (
 
 // Wire fixtures follow the native Jaeger 1.62 / Loki 3.3 HTTP query contracts.
 // They are test records, not evidence of a deployed SDK pipeline.
+const nativeTraceService = "demo-v1"
+
 const jaegerFixture = `{"data":[{
  "traceID":"11111111111111111111111111111111",
- "processes":{"p1":{"serviceName":"azure.ai.agentserver","tags":[
+ "processes":{"p1":{"serviceName":"demo-v1","tags":[
  {"key":"service.namespace","value":"adaptive"},{"key":"adaptive.agent.name","value":"demo"}]}},
  "spans":[
  {"traceID":"11111111111111111111111111111111","spanID":"2222222222222222","processID":"p1","operationName":"invoke_agent demo","startTime":1791547200000000,"duration":1500,"tags":[{"key":"span.kind","value":"server"}],"references":[],"logs":[]},

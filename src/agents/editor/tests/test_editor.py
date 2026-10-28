@@ -29,9 +29,6 @@ def pipeline(monkeypatch):
         name = request.url.path.split("/")[2]
         requests.append(request)
         assert request.method == "POST"
-        prefix = next(
-            prefix for prefix in ("WRITER", "AUDITOR") if agent.os.environ[f"{prefix}_NAME"] == name
-        )
         assert request.url.path == f"/agents/{name}/responses"
         assert request.headers["authorization"] == "Bearer application-token"
         assert json.loads(request.content)["store"] is False
@@ -147,7 +144,7 @@ async def test_peer_guardrail_failure_preserves_block_reason(pipeline):
         "status": "failed",
         "error": {"code": "server_error", "message": "403 AGT deny"},
     }
-    with pytest.raises(ValueError, match="writer.*AGT deny"):
+    with pytest.raises(ValueError, match=r"writer.*AGT deny"):
         await agent.edit([Message("user", ["Brief"])])
     assert len(pipeline[0]) == 1
 
@@ -194,8 +191,7 @@ async def test_labels_and_urls_use_configured_agents(pipeline, monkeypatch):
         )
     result = await agent.edit([Message("user", ["Brief"])])
     assert result.text == (
-        "## draft-writer\n\ndraft-writer result\n\n"
-        "## reviewer\n\nreviewer result"
+        "## draft-writer\n\ndraft-writer result\n\n## reviewer\n\nreviewer result"
     )
     assert json.loads(pipeline[0][1].content)["input"][1]["content"] == "draft-writer result"
 

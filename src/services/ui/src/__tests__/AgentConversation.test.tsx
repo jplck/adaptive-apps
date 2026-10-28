@@ -47,7 +47,7 @@ async function send(prompt: string) {
   fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 }
 
-it.each(['prompt', 'hosted'] as const)('pins the %s runtime through updates and API outage, then resets explicitly', async (type) => {
+it.each(['prompt', 'hosted'] as const)('retains the %s discovery snapshot through updates and API outage, then resets explicitly', async (type) => {
   let current = agentFixture('first', type);
   let discoveryCalls = 0;
   let outage = false;

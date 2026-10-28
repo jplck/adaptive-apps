@@ -56,7 +56,7 @@ function respond() {
   );
 }
 
-it.each(['app', 'agentUser', 'endUserOBO'] as const)('invokes %s with native Graph events and pins mode/runtime until reset', async (mode) => {
+it.each(['app', 'agentUser', 'endUserOBO'] as const)('invokes %s with native Graph events and pins mode/discovery until reset', async (mode) => {
   const popup = vi.spyOn(UserManager.prototype, 'signinPopup').mockResolvedValue(assertion());
   const headers: Headers[] = [];
   server.use(http.post(`*${graphAgent.endpoint}`, ({ request }) => {

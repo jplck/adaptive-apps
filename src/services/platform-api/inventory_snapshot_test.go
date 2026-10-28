@@ -79,6 +79,21 @@ func TestInventoryVerificationDetectsIdentityChange(t *testing.T) {
 	request(t, f.api, "GET", "/v1/agents/demo", "", 503)
 }
 
+func TestInventoryVerificationDetectsAgentChange(t *testing.T) {
+	f := newFixture(t)
+	reads := 0
+	f.objects.PrependReactor("list", "configmaps", func(ktesting.Action) (bool, runtime.Object, error) {
+		reads++
+		if reads == 2 {
+			changed := f.agent.DeepCopy()
+			changed.Object["data"].(map[string]any)["definition"] = `{"instructions":"changed"}`
+			update(t, f, "configmaps", changed)
+		}
+		return false, nil, nil
+	})
+	request(t, f.api, "GET", "/v1/agents/demo", "", 409)
+}
+
 func TestInventorySnapshotIsNotSharedAcrossRequests(t *testing.T) {
 	f := newFixture(t)
 	request(t, f.api, "GET", "/v1/agents/demo", "", 200)

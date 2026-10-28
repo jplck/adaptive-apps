@@ -461,12 +461,12 @@
       "locked": false,
       "fontSize": 16,
       "fontFamily": 2,
-      "text": "Immutable Radius agentReleases\nNative Responses host; pinned OCI image",
+      "text": "Mutable Radius agents\nNative Responses host; pinned OCI image",
       "textAlign": "left",
       "verticalAlign": "middle",
       "baseline": 36.0,
       "containerId": "e8",
-      "originalText": "Immutable Radius agentReleases\nNative Responses host; pinned OCI image",
+      "originalText": "Mutable Radius agents\nNative Responses host; pinned OCI image",
       "lineHeight": 1.25
     },
     {
@@ -537,12 +537,12 @@
       "locked": false,
       "fontSize": 16,
       "fontFamily": 2,
-      "text": "Singleton StatefulSet, Service and PVC\nEnvoy HTTPRoute + authorization policy\nIdentity and optional governance sidecars",
+      "text": "Singleton StatefulSet, Service and PVC\nAgentgateway HTTPRoute + policy\nOptional Graph and governance sidecars",
       "textAlign": "left",
       "verticalAlign": "middle",
       "baseline": 56.0,
       "containerId": "e10",
-      "originalText": "Singleton StatefulSet, Service and PVC\nEnvoy HTTPRoute + authorization policy\nIdentity and optional governance sidecars",
+      "originalText": "Singleton StatefulSet, Service and PVC\nAgentgateway HTTPRoute + policy\nOptional Graph and governance sidecars",
       "lineHeight": 1.25
     },
     {
@@ -793,12 +793,12 @@
       "locked": false,
       "fontSize": 16,
       "fontFamily": 2,
-      "text": "Prompt instructions, model and tools\nCaptured in an explicit immutable release",
+      "text": "Prompt instructions, model and tools\nDeclared in the mutable agent definition",
       "textAlign": "left",
       "verticalAlign": "middle",
       "baseline": 36.0,
       "containerId": "e16",
-      "originalText": "Prompt instructions, model and tools\nCaptured in an explicit immutable release",
+      "originalText": "Prompt instructions, model and tools\nDeclared in the mutable agent definition",
       "lineHeight": 1.25
     },
     {
@@ -869,12 +869,12 @@
       "locked": false,
       "fontSize": 16,
       "fontFamily": 2,
-      "text": "Dedicated prompt host per release\nSingleton StatefulSet; no shared runtime\nFoundry: native prompt definition, no image",
+      "text": "Dedicated prompt host per agent\nSingleton StatefulSet; no shared runtime\nFoundry: native prompt definition, no image",
       "textAlign": "left",
       "verticalAlign": "middle",
       "baseline": 56.0,
       "containerId": "e18",
-      "originalText": "Dedicated prompt host per release\nSingleton StatefulSet; no shared runtime\nFoundry: native prompt definition, no image",
+      "originalText": "Dedicated prompt host per agent\nSingleton StatefulSet; no shared runtime\nFoundry: native prompt definition, no image",
       "lineHeight": 1.25
     },
     {
@@ -1125,12 +1125,12 @@
       "locked": false,
       "fontSize": 16,
       "fontFamily": 2,
-      "text": "One Radius.Resources type catalogue\nagents + agentIdentities + agentReleases\nNo agent lifecycle CRDs or operator",
+      "text": "One Radius.Resources type catalogue\nagents + agentIdentities + aiGateways\nNo agent lifecycle CRDs or operator",
       "textAlign": "left",
       "verticalAlign": "middle",
       "baseline": 56.0,
       "containerId": "e24",
-      "originalText": "One Radius.Resources type catalogue\nagents + agentIdentities + agentReleases\nNo agent lifecycle CRDs or operator",
+      "originalText": "One Radius.Resources type catalogue\nagents + agentIdentities + aiGateways\nNo agent lifecycle CRDs or operator",
       "lineHeight": 1.25
     },
     {
@@ -1201,12 +1201,12 @@
       "locked": false,
       "fontSize": 16,
       "fontFamily": 2,
-      "text": "Retained metadata, identity and captures\nExplicit active version; no release fallback\nAdmission protects singleton / immutability",
+      "text": "Mutable definition; retained identity/state\nStable endpoint; no release fallback\nReadiness verifies current native runtime",
       "textAlign": "left",
       "verticalAlign": "middle",
       "baseline": 56.0,
       "containerId": "e26",
-      "originalText": "Retained metadata, identity and captures\nExplicit active version; no release fallback\nAdmission protects singleton / immutability",
+      "originalText": "Mutable definition; retained identity/state\nStable endpoint; no release fallback\nReadiness verifies current native runtime",
       "lineHeight": 1.25
     },
     {
@@ -1457,12 +1457,12 @@
       "locked": false,
       "fontSize": 16,
       "fontFamily": 2,
-      "text": "Radius aiModels -> authenticated LiteLLM\nNative priorities, weights and fallback\nModel calls never use diagnostics API",
+      "text": "aiModels backends -> aiGateways routing\nAuthenticated LiteLLM; priorities/weights\nModel calls never use diagnostics API",
       "textAlign": "left",
       "verticalAlign": "middle",
       "baseline": 56.0,
       "containerId": "e32",
-      "originalText": "Radius aiModels -> authenticated LiteLLM\nNative priorities, weights and fallback\nModel calls never use diagnostics API",
+      "originalText": "aiModels backends -> aiGateways routing\nAuthenticated LiteLLM; priorities/weights\nModel calls never use diagnostics API",
       "lineHeight": 1.25
     },
     {
@@ -2121,12 +2121,12 @@
       "locked": false,
       "fontSize": 16,
       "fontFamily": 2,
-      "text": "Same hosted OCI digest; no cloud rebuild\nStandard DefaultAzureCredential (DAC)\nPlatform-specific identity configuration",
+      "text": "Same hosted OCI digest remains the goal\nLocal artifacts use Keycloak token provider\nFoundry Entra authentication is a gap",
       "textAlign": "left",
       "verticalAlign": "middle",
       "baseline": 56.0,
       "containerId": "skills-box-1",
-      "originalText": "Same hosted OCI digest; no cloud rebuild\nStandard DefaultAzureCredential (DAC)\nPlatform-specific identity configuration",
+      "originalText": "Same hosted OCI digest remains the goal\nLocal artifacts use Keycloak token provider\nFoundry Entra authentication is a gap",
       "lineHeight": 1.25
     },
     {
@@ -2197,12 +2197,12 @@
       "locked": false,
       "fontSize": 16,
       "fontFamily": 2,
-      "text": "Foundry: mirror original digest to ACR\nNative Responses protocol 2.0.0\nLive same-image / cloud DAC unqualified",
+      "text": "Foundry: mirror original digest to ACR\nNative Responses protocol 2.0.0\nLive same-image / cloud auth unqualified",
       "textAlign": "left",
       "verticalAlign": "middle",
       "baseline": 56.0,
       "containerId": "skills-box-2",
-      "originalText": "Foundry: mirror original digest to ACR\nNative Responses protocol 2.0.0\nLive same-image / cloud DAC unqualified",
+      "originalText": "Foundry: mirror original digest to ACR\nNative Responses protocol 2.0.0\nLive same-image / cloud auth unqualified",
       "lineHeight": 1.25
     },
     {
@@ -2861,12 +2861,12 @@
       "locked": false,
       "fontSize": 16,
       "fontFamily": 2,
-      "text": "DAC adapter supplies local app tokens\nOptional official Entra identity sidecar\nBlueprint assertion stays in sidecar",
+      "text": "Keycloak provider supplies local tokens\nOptional Graph broker + Entra sidecar\nBlueprint assertion stays in sidecar",
       "textAlign": "left",
       "verticalAlign": "middle",
       "baseline": 56.0,
       "containerId": "e58",
-      "originalText": "DAC adapter supplies local app tokens\nOptional official Entra identity sidecar\nBlueprint assertion stays in sidecar",
+      "originalText": "Keycloak provider supplies local tokens\nOptional Graph broker + Entra sidecar\nBlueprint assertion stays in sidecar",
       "lineHeight": 1.25
     },
     {
@@ -3449,12 +3449,12 @@
       "locked": false,
       "fontSize": 16,
       "fontFamily": 2,
-      "text": "Radius agentGuardrails policy snapshots\nExplicit per-release capture and attachment\nAGT proxy: pre_input / pre_tool stages",
+      "text": "Radius agentGuardrails policy snapshots\nExplicit per-agent governance attachment\nAGT proxy: pre_input / pre_tool stages",
       "textAlign": "left",
       "verticalAlign": "middle",
       "baseline": 56.0,
       "containerId": "e64",
-      "originalText": "Radius agentGuardrails policy snapshots\nExplicit per-release capture and attachment\nAGT proxy: pre_input / pre_tool stages",
+      "originalText": "Radius agentGuardrails policy snapshots\nExplicit per-agent governance attachment\nAGT proxy: pre_input / pre_tool stages",
       "lineHeight": 1.25
     },
     {
@@ -3781,12 +3781,12 @@
       "locked": false,
       "fontSize": 16,
       "fontFamily": 2,
-      "text": "Native prompt and hosted kinds\nInitial-deployment recipe source-tested\nNot live-qualified; not full platform parity",
+      "text": "Native prompt and hosted kinds\nMutable Foundry recipe source-tested\nNot live-qualified; not full platform parity",
       "textAlign": "left",
       "verticalAlign": "middle",
       "baseline": 56.0,
       "containerId": "e72",
-      "originalText": "Native prompt and hosted kinds\nInitial-deployment recipe source-tested\nNot live-qualified; not full platform parity",
+      "originalText": "Native prompt and hosted kinds\nMutable Foundry recipe source-tested\nNot live-qualified; not full platform parity",
       "lineHeight": 1.25
     },
     {
@@ -3857,12 +3857,12 @@
       "locked": false,
       "fontSize": 16,
       "fontFamily": 2,
-      "text": "One initial release; native identity\nCloud promotion / retirement unqualified\nEvaluations / background runs unqualified",
+      "text": "Mutable native agent; native identity\nLive cloud updates remain unqualified\nEvaluations / background runs unqualified",
       "textAlign": "left",
       "verticalAlign": "middle",
       "baseline": 56.0,
       "containerId": "e74",
-      "originalText": "One initial release; native identity\nCloud promotion / retirement unqualified\nEvaluations / background runs unqualified",
+      "originalText": "Mutable native agent; native identity\nLive cloud updates remain unqualified\nEvaluations / background runs unqualified",
       "lineHeight": 1.25
     },
     {
@@ -4113,12 +4113,12 @@
       "locked": false,
       "fontSize": 16,
       "fontFamily": 2,
-      "text": "Hosted editor -> pinned writer -> auditor\nNative Responses SDK + explicit peer grants\nNo central invocation proxy or A2A claim",
+      "text": "Hosted editor -> stable writer -> auditor\nNative Responses SDK + explicit peer grants\nNo diagnostics invocation proxy",
       "textAlign": "left",
       "verticalAlign": "middle",
       "baseline": 56.0,
       "containerId": "e80",
-      "originalText": "Hosted editor -> pinned writer -> auditor\nNative Responses SDK + explicit peer grants\nNo central invocation proxy or A2A claim",
+      "originalText": "Hosted editor -> stable writer -> auditor\nNative Responses SDK + explicit peer grants\nNo diagnostics invocation proxy",
       "lineHeight": 1.25
     },
     {
@@ -4189,12 +4189,12 @@
       "locked": false,
       "fontSize": 16,
       "fontFamily": 2,
-      "text": "Direct authorized Envoy Responses routes\nForeground / SSE; explicit store=false\nFoundry peer URL/session fix deferred",
+      "text": "Authorized agentgateway Responses routes\nForeground / SSE; explicit store=false\nFoundry peer authentication unqualified",
       "textAlign": "left",
       "verticalAlign": "middle",
       "baseline": 56.0,
       "containerId": "e82",
-      "originalText": "Direct authorized Envoy Responses routes\nForeground / SSE; explicit store=false\nFoundry peer URL/session fix deferred",
+      "originalText": "Authorized agentgateway Responses routes\nForeground / SSE; explicit store=false\nFoundry peer authentication unqualified",
       "lineHeight": 1.25
     },
     {
@@ -4361,12 +4361,12 @@
       "locked": false,
       "fontSize": 15,
       "fontFamily": 2,
-      "text": "Boundaries: native foreground text Responses only; stored, reference, child and background operations are denied.\nRetention: identities, captures and state have separate ownership; no automatic pruning, credential regeneration or release fallback.\nPortability: hosted agents require identical image digests; prompt agents require native kind and definition parity, not an identical container.\nQualification: GPU / Foundry model inference has documented live evidence; Foundry agent hosting and cloud A365 ingestion remain unqualified.\nNo existing-operator ownership handover is qualified. Setup downloads need connectivity; this is not a fully offline installation claim.\nCurrent basis: native Radius agent guide and AI / Radius capability summary. Endpoint/session compatibility work is deferred.",
+      "text": "Boundaries: foreground text Responses with store=false; strict body-aware admission is optional and disabled by default.\nRetention: identities and state have separate ownership; mutable agents update in place without automatic pruning or credential regeneration.\nPortability: identical hosted image digests remain the goal, but local Keycloak and native Foundry Entra authentication are not qualified 1:1.\nQualification: historical model inference evidence does not qualify this rebased agent deployment, Foundry hosting or cloud A365 ingestion.\nNo existing-operator ownership handover is qualified. Setup downloads need connectivity; this is not a fully offline installation claim.\nCurrent basis: native Radius agent guide and AI / Radius capability summary. Six SDK state-isolation contract tests remain expected failures.",
       "textAlign": "left",
       "verticalAlign": "middle",
       "baseline": 108.5,
       "containerId": "legend",
-      "originalText": "Boundaries: native foreground text Responses only; stored, reference, child and background operations are denied.\nRetention: identities, captures and state have separate ownership; no automatic pruning, credential regeneration or release fallback.\nPortability: hosted agents require identical image digests; prompt agents require native kind and definition parity, not an identical container.\nQualification: GPU / Foundry model inference has documented live evidence; Foundry agent hosting and cloud A365 ingestion remain unqualified.\nNo existing-operator ownership handover is qualified. Setup downloads need connectivity; this is not a fully offline installation claim.\nCurrent basis: native Radius agent guide and AI / Radius capability summary. Endpoint/session compatibility work is deferred.",
+      "originalText": "Boundaries: foreground text Responses with store=false; strict body-aware admission is optional and disabled by default.\nRetention: identities and state have separate ownership; mutable agents update in place without automatic pruning or credential regeneration.\nPortability: identical hosted image digests remain the goal, but local Keycloak and native Foundry Entra authentication are not qualified 1:1.\nQualification: historical model inference evidence does not qualify this rebased agent deployment, Foundry hosting or cloud A365 ingestion.\nNo existing-operator ownership handover is qualified. Setup downloads need connectivity; this is not a fully offline installation claim.\nCurrent basis: native Radius agent guide and AI / Radius capability summary. Six SDK state-isolation contract tests remain expected failures.",
       "lineHeight": 1.25
     }
   ],

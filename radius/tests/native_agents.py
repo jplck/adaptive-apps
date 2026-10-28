@@ -300,7 +300,11 @@ class NativeAgents(unittest.TestCase):
                          "127.0.0.1:4318")
         pipeline = config["service"]["pipelines"]["traces"]
         self.assertEqual(pipeline["exporters"], ["otlp_http/central"])
-        self.assertEqual(pipeline["processors"], ["memory_limiter", "attributes/agent", "batch"])
+        self.assertEqual(pipeline["processors"], ["memory_limiter", "resource/agent", "attributes/agent", "batch"])
+        attributes = config["processors"]["resource/agent"]["attributes"]
+        self.assertEqual(attributes[0]["key"], "service.name")
+        self.assertEqual(attributes[0]["value"], "[variables('name')]")
+        self.assertEqual(attributes[0]["action"], "upsert")
         self.assertEqual(config["exporters"]["otlp_http/central"]["sending_queue"]["queue_size"], 128)
         actions = json.dumps(config["processors"]["attributes/agent"])
         self.assertIn("microsoft.a365.agent.blueprint.id", actions)

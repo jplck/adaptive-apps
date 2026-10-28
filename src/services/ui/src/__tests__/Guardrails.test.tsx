@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { server } from '../mocks/server';
 import { AgentGuardrails } from '../routes/guardrails/Guardrails';
@@ -18,7 +18,7 @@ const platform = { reference: 'platform-ref', namespace: 'adaptive-guardrails-pl
 const attached = { reference: 'application-ref', namespace: 'adaptive-guardrails-apps', targets: [], bundle: { policies: [{ ...bundle.policies[0], name: 'extra' }] } };
 
 describe('Guardrails', () => {
-  it('links guardrails to per-agent release views instead of listing global policies', async () => {
+  it('links guardrails to per-agent views instead of listing global policies', async () => {
     let globalCalls = 0;
     server.use(http.get('*/v1/guardrails', () => {
       globalCalls += 1;
@@ -26,45 +26,45 @@ describe('Guardrails', () => {
     }));
     renderWithProviders(<App />, { route: '/guardrails' });
     expect(screen.getByRole('link', { name: 'Guardrails' })).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByText('Guardrails are shown for each agent release.')).toBeInTheDocument();
+    expect(screen.getByText('Guardrails are shown for each agent.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'View agents' })).toHaveAttribute('href', '/agents');
     expect(screen.queryByText(/Global policies|Platform-owned|baseline/)).not.toBeInTheDocument();
     expect(globalCalls).toBe(0);
   });
 
-  it('shows concise agent release policy details without inherited global policies', async () => {
+  it('shows attached and inherited policies without claiming enforcement', async () => {
     server.use(http.get('*/v1/agents/demo/guardrails', () => HttpResponse.json({
-      name: 'demo', version: '1', enabled: true, mode: 'audit',
+      name: 'demo', enabled: true, mode: 'audit',
       inherited: [platform], attached, policy_sha256: 'digest',
       deployment: 'demo-v1', phase: 'Available',
     })));
     renderWithProviders(<AgentGuardrails name="demo" visible />);
     expect(await screen.findByText('application-ref')).toBeInTheDocument();
-    expect(screen.getByText('demo · v1')).toBeInTheDocument();
+    expect(screen.getByText('demo')).toBeInTheDocument();
     expect(screen.getByText('Policy attached')).toBeInTheDocument();
     expect(screen.getByText('Enforcement unverified')).toBeInTheDocument();
     expect(screen.getByRole('table', { name: 'application-ref rules' })).toBeInTheDocument();
-    expect(screen.getByText('responses-only')).toBeInTheDocument();
-    expect(screen.queryByText('platform-ref')).not.toBeInTheDocument();
+    expect(within(screen.getByRole('table', { name: 'application-ref rules' })).getByText('responses-only')).toBeInTheDocument();
+    expect(screen.getByRole('table', { name: 'platform-ref rules' })).toBeInTheDocument();
     expect(screen.queryByText('Inherited platform policies')).not.toBeInTheDocument();
-    expect(screen.queryByText(/Matching platform policies|PII and prompt-injection|Cloud enforcement/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Cloud enforcement is separate/)).toBeInTheDocument();
   });
 
-  it('shows a compact state when a release has no attached policy', async () => {
+  it('shows a compact state when an agent has no attached policy', async () => {
     server.use(http.get('*/v1/agents/demo/guardrails', () => HttpResponse.json({
-      name: 'demo', version: '1', enabled: false, mode: null, enforcementVerified: false,
+      name: 'demo', enabled: false, mode: null, enforcementVerified: false,
       inherited: [], attached: null, policy_sha256: null,
       deployment: 'demo-v1', phase: 'Available',
     })));
     renderWithProviders(<AgentGuardrails name="demo" visible />);
     expect(await screen.findByText('No policy attached')).toBeInTheDocument();
-    expect(screen.getByText('No agent-specific policy is attached to this release.')).toBeInTheDocument();
+    expect(screen.getByText('No agent-specific policy is attached to this agent.')).toBeInTheDocument();
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
 
   it('shows the declared policy mode in the flat rules table', async () => {
     server.use(http.get('*/v1/agents/demo/guardrails', () => HttpResponse.json({
-      name: 'demo', version: '1', enabled: true, mode: null, enforcementVerified: false,
+      name: 'demo', enabled: true, mode: null, enforcementVerified: false,
       inherited: [], attached: {
         ...attached,
         bundle: { policies: [{ ...bundle.policies[0], mode: 'audit' }] },

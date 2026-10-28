@@ -107,11 +107,10 @@ it('shows configured tools and read-only settings while preserving streamed invo
   expect(screen.getByRole('radio', { name: 'App' })).toBeChecked();
   expect(screen.getByRole('radio', { name: 'App' })).toBeEnabled();
   expect(screen.queryByText(/Model calls always use application identity/)).not.toBeInTheDocument();
-  expect(screen.getAllByRole('tab')).toHaveLength(3);
-  for (const name of ['Chat', 'Monitor', 'Guardrails']) {
+  expect(screen.getAllByRole('tab')).toHaveLength(4);
+  for (const name of ['Chat', 'Monitor', 'Guardrails', 'A2A']) {
     expect(screen.getByRole('tab', { name })).toBeInTheDocument();
   }
-  expect(screen.queryByRole('tab', { name: 'A2A' })).not.toBeInTheDocument();
   expect(screen.getByLabelText('Model')).toHaveAttribute('readonly');
   expect(screen.getByLabelText('Instructions')).toHaveAttribute('readonly');
   expect(screen.queryByRole('button', { name: /save|publish|preview|connect/i })).not.toBeInTheDocument();
@@ -119,7 +118,7 @@ it('shows configured tools and read-only settings while preserving streamed invo
   fireEvent.change(screen.getByLabelText('Message the agent...'), { target: { value: 'Find code' } });
   fireEvent.click(screen.getByRole('tab', { name: 'Monitor' }));
   fireEvent.click(screen.getByRole('tab', { name: 'Guardrails' }));
-  expect(await screen.findByText('No agent-specific policy is attached to this release.')).toBeInTheDocument();
+  expect(await screen.findByText('No agent-specific policy is attached to this agent.')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('tab', { name: 'Chat' }));
   expect(screen.getByLabelText('Message the agent...')).toHaveValue('Find code');
   fireEvent.click(screen.getByRole('button', { name: 'Send' }));

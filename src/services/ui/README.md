@@ -38,7 +38,8 @@ Playgrounds use the current runtime. The first send pins the observed agent
 configuration and call identity for that conversation. Each send uses plain-text
 input and explicit `store=false`, with no reference to a previous response.
 Displayed history is not model context. Updating the agent does not move an
-existing UI conversation to a different captured configuration.
+existing UI conversation to a different discovery snapshot, but the stable
+endpoint can serve a newly deployed runtime between turns. It is not a runtime pin.
 Failed, incomplete or cancelled turns require **New conversation**; no automatic
 replay or runtime fallback occurs. Hosted delegation remains unavailable.
 Prompt agents with the captured native `graph-me` tool can select app,
@@ -55,11 +56,12 @@ Unknown provider metadata is displayed neutrally, not inferred as local.
 
 ## Operational browser contracts
 
-The exact response schemas are in `src/api/client.ts`; Monitor event schemas
-are in `src/components/MonitorPanel.tsx`. API changes must preserve those contracts:
+Response schemas live in the modules re-exported by `src/api/client.ts`;
+Monitor schemas live in `src/components/monitor/model.ts`.
+API changes must preserve those contracts:
 
 - The Guardrails navigation view links to Agents; policy details appear in each
-  agent playground for the selected release. The browser does not display the
+  agent playground for the current agent. The browser does not display the
   global `GET /v1/guardrails` policies there.
 - `GET /v1/guardrails`: `enabled`, nullable `mode`, and `policies`.
 - `GET /v1/agents/{name}/guardrails`: current agent configuration with
@@ -120,8 +122,10 @@ identity uses the exact issuer and subject, not an inferred Entra object ID.
 
 Keycloak tokens stay in per-tab session storage. API, model, agent and monitor
 requests share token renewal before expiry.
-Concurrent requests share one renewal; failed renewal or HTTP 401 ends the
-local session without replaying application requests. Existing broker sessions
+Concurrent requests share one renewal; failed renewal or API HTTP 401 ends the
+local session without replaying application requests. Model and agent invocation
+401s remain downstream request errors without discarding the browser session.
+Existing broker sessions
 require sign-in again. The old broker token fields, Entra refresh grants and
 `/oidc` proxy are removed. A Keycloak login token is not an Entra delegated token.
 Agent application identity is independent.
@@ -157,7 +161,7 @@ Native ingress receives `X-Impersonation-Mode`; OBO alone adds
 `X-Entra-User-Token`. No downstream Graph bearer or `X-client-*` token is sent.
 Backend assertion validation and userinfo matching remain authoritative.
 Agent-user mode additionally requires reported `agentUserId`; a Keycloak mirror
-does not qualify a worker user. All call identity/release controls are pinned
+does not qualify a worker user. Call identity controls are pinned
 until **New conversation**. Real human OBO/worker-user behavior requires separate
 live qualification; UI source tests do not establish that gate.
 
@@ -180,7 +184,7 @@ certificates, validate signatures/expiry/issuer/audience, and support key
 rotation. The audience named `api://adaptive-broker` is an identifier, **not**
 the new issuer. Do not use the broker's combined JWKS/provider metadata.
 
-For read-only `/v1/*`, the native Envoy route requires `azp=adaptive-ui` and the
+For read-only `/v1/*`, the native agentgateway policy requires `azp=adaptive-ui` and the
 explicit `agent.invoke` user role with the platform audience. The API Service
 accepts ingress only from that Gateway and consumes no spoofable caller headers.
 It cannot be exposed directly as an alternative authorization path. Preserve
@@ -196,13 +200,13 @@ Agent ingress source now validates native Keycloak JWTs and requires the
 `adaptive-ui` user client plus `agent.invoke` in the mapped `roles` array.
 The shared Agent Gateway policy service supplies fail-closed HTTP admission on
 port 8083, not gRPC.
-Only exact version POST `/responses` with plain-text input and `store=false`
+Only POST `/agents/{name}/responses` with plain-text input and `store=false`
 is qualified in source; stored children, references and background remain denied.
 Graph delegation requires the separately implemented native admission contract
 above; the UI does not qualify backend token removal or delegation. Bearers are
 removed before SDK handling. See the
 [qualification status](../../../docs/agents/native-radius.md#verification-status).
 
-Both playgrounds send the bounded stateless shape and select exact releases.
+Both playgrounds send the bounded stateless shape to stable agent endpoints.
 Stored conversations remain unavailable; browser renewal/logout, federation and
 key rotation need separate checks.

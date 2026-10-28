@@ -35,11 +35,10 @@ describe('HostedAgentPlayground tabs', () => {
     );
 
     const composer = await screen.findByLabelText('Message the hosted agent...');
-    expect(screen.getAllByRole('tab')).toHaveLength(3);
-    for (const name of ['Chat', 'Monitor', 'Guardrails']) {
+    expect(screen.getAllByRole('tab')).toHaveLength(4);
+    for (const name of ['Chat', 'Monitor', 'Guardrails', 'A2A']) {
       expect(screen.getByRole('tab', { name })).toBeInTheDocument();
     }
-    expect(screen.queryByRole('tab', { name: 'A2A' })).not.toBeInTheDocument();
     expect(screen.getByRole('radio', { name: 'App' })).toBeChecked();
     expect(screen.getByRole('radio', { name: 'App' })).toBeEnabled();
     expect(screen.queryByText(/Hosted delegated identity is unavailable/)).not.toBeInTheDocument();
@@ -47,7 +46,7 @@ describe('HostedAgentPlayground tabs', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Monitor' }));
     fireEvent.click(screen.getByRole('tab', { name: 'Guardrails' }));
-    expect(await screen.findByText('No agent-specific policy is attached to this release.')).toBeInTheDocument();
+    expect(await screen.findByText('No agent-specific policy is attached to this agent.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: 'Chat' }));
 
     expect(screen.getByLabelText('Message the hosted agent...')).toHaveValue('find a beach trip');
@@ -55,7 +54,7 @@ describe('HostedAgentPlayground tabs', () => {
     expect(screen.getByRole('radio', { name: 'Agent user' })).toBeDisabled();
   });
 
-  it('blocks hosted delegation and calls the native release as app in red-button mode', async () => {
+  it('blocks hosted delegation and calls the current agent as app in red-button mode', async () => {
     useConnectivityFaultStore.setState({ enabled: true });
     localStorage.setItem('adaptive.authToken', 'broker-token');
     localStorage.setItem('adaptive.providerToken', 'local-user-token');

@@ -57,6 +57,13 @@ var collectorConfig = {
   receivers: { otlp: { protocols: { http: { endpoint: '127.0.0.1:4318' } } } }
   processors: {
     memory_limiter: { check_interval: '1s', limit_mib: 192, spike_limit_mib: 48 }
+    'resource/agent': {
+      attributes: [
+        { key: 'service.name', value: name, action: 'upsert' }
+        { key: 'service.namespace', value: namespace, action: 'upsert' }
+        { key: 'adaptive.agent.name', value: p.agentName, action: 'upsert' }
+      ]
+    }
     'attributes/agent': {
       actions: concat([
         { key: 'gen_ai.agent.id', value: connected ? id.entraClientId : id.keycloakClientId, action: 'upsert' }
@@ -81,7 +88,7 @@ var collectorConfig = {
     pipelines: {
       traces: {
         receivers: ['otlp']
-        processors: ['memory_limiter', 'attributes/agent', 'batch']
+        processors: ['memory_limiter', 'resource/agent', 'attributes/agent', 'batch']
         exporters: ['otlp_http/central']
       }
     }

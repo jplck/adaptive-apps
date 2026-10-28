@@ -13,7 +13,8 @@ trading recipes remain independent of the native-agent environment.
 | --- | --- | --- |
 | `agents` | Logical ConfigMap plus one mutable singleton StatefulSet, Service, HTTPRoute, AgentgatewayPolicy and NetworkPolicy | Logical metadata and state PVC retained; current runtime updated in place |
 | `agentIdentities` | Keycloak client, optional Entra blueprint/principal/Agent ID, Secret, binding ConfigMap and ServiceAccount | Independent protected Terraform state |
-| `aiModels` | Gateway configuration; KAITO/vLLM inference, existing inference Service, remote Foundry binding or virtual priority group | Weights/cache retained |
+| `aiModels` | Individual KAITO/vLLM, existing inference Service or remote Foundry backend facts | Local weights/cache retained |
+| `aiGateways` | Authenticated LiteLLM aliases, priorities, weights and fallback | Configuration owned separately from model backends |
 | `agentGuardrails` | Native policy ConfigMap | Retained; the current agent records exact attached content |
 | `keycloakLogins` | Existing-realm PKCE client and optional reviewed Entra federation | Separate administrator environment |
 
@@ -81,6 +82,15 @@ requires one ready, current-revision replica, Bound state, current-generation
 accepted/programmed ingress and exact Radius ownership. An unready update does
 not produce a success-shaped endpoint and there is no release fallback.
 Monitor reads bounded native Jaeger/Loki records, not manufactured events.
+
+Native host traces pass through a bounded per-agent stock collector on loopback
+OTLP HTTP. It normalizes resource `service.name` to the verified runtime name,
+preserves SDK span names/parents, and adds agent identity attributes before
+forwarding to the shared collector. Monitor queries that runtime service,
+not the hosting SDK's shared `azure.ai.agentserver` service.
+Direct A365 export is disabled; cloud ingestion and replay remain unqualified.
+The updated mutable runtime recipe is published as `agents:0.6.2`, leaving
+earlier recipe artifacts unchanged.
 
 ## Delivery
 
@@ -345,8 +355,8 @@ application-specific `environment` bindings. Do not override platform identity,
 model, state or telemetry environment variables. Radius sampling fields
 `temperature`/`top_p` use validated decimal strings because its type catalogue
 does not support fractional numbers; the UI receives numeric values.
-The editor's writer/auditor URLs must pin concrete releases. Peer grants are
-explicit; no discovery, automatic active resolution or replay is added.
+The editor's writer/auditor URLs use stable `/agents/{name}/` bases. Peer grants
+are explicit; no discovery, automatic version resolution or replay is added.
 Read the peer's actual identity binding before authoring `peers`: in connected
 provisioning, `agentId` is the Entra Agent ID GUID mirrored into the Keycloak
 `agent_id` claim, not the deterministic Keycloak client-name string.
@@ -380,7 +390,7 @@ the exact UTF-8 bytes. The qualified development policy is:
 
 Use the resulting native reference, `<namespace>/<configmap>@sha256:<digest>`,
 with `PolicySnapshot`, `compose_bundle` and `ProxyConfig` to capture the
-release's exact proxy configuration and digest. ConfigMap names are opaque
+agent's exact proxy configuration and digest. ConfigMap names are opaque
 lowercase Radius names; only the SHA-256 suffix is hexadecimal. The retained
 custom sidecar supplies the transparent OpenAI/SSE bridge; detection and policy
 evaluation use upstream AGT. The prebuilt AGT detection HTTP server is not a

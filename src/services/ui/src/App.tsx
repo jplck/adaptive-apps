@@ -1,5 +1,4 @@
 import { Badge, Text } from '@fluentui/react-components';
-import { useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AuthCallback } from './auth/AuthCallback';
@@ -16,7 +15,6 @@ import { ModelsList } from './routes/models/ModelsList';
 import { ToolsList } from './routes/tools/ToolsList';
 import { PlatformGuardrails } from './routes/guardrails/Guardrails';
 import { useConnectivityFaultStore } from './state/connectivityFault';
-import { getPlatformGuardrails } from './api/client';
 import { embeddedMode } from './auth/config';
 
 const tenantName = import.meta.env.VITE_TENANT_NAME ?? 'adaptive-edge';
@@ -41,12 +39,6 @@ export function App(): JSX.Element {
 }
 
 function Shell({ embedded }: { embedded: boolean }): JSX.Element {
-  const governance = useQuery({
-    queryKey: ['guardrails'],
-    queryFn: getPlatformGuardrails,
-    refetchInterval: 30_000,
-    enabled: !embedded,
-  });
   const faultEnabled = useConnectivityFaultStore((state) => state.enabled);
   const faultError = useConnectivityFaultStore((state) => state.error);
   const faultLoading = useConnectivityFaultStore((state) => state.isLoading);
@@ -73,13 +65,6 @@ function Shell({ embedded }: { embedded: boolean }): JSX.Element {
         <div className="topbar-actions">
           {embedded ? <a href="/" className="nav-entry">← Back to Trading</a> : <Badge appearance="outline">Runtime only</Badge>}
           {!embedded ? <>
-          <Badge
-            appearance="tint"
-            color={governance.isError ? 'warning' : governance.data?.enabled ? 'brand' : 'subtle'}
-            title="Global policy configuration only; agents may also have attachments. This catalogue does not verify runtime enforcement."
-          >
-            Global policies: {governance.isError ? 'unavailable' : governance.isLoading ? 'loading' : governance.data?.enabled ? 'configured' : 'none'}
-          </Badge>
           <Badge color={faultError ? 'warning' : faultEnabled ? 'danger' : 'subtle'} appearance="tint">
             {faultError ? 'Fault status unavailable' : faultLoading ? 'Checking fault configuration'
               : faultEnabled ? 'Cloud outage injected' : 'No outage injected'}

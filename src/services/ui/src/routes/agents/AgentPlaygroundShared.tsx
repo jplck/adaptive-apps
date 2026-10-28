@@ -54,7 +54,7 @@ export function AgentPlaygroundTabs({
       {!embedded ? <div hidden={tab !== 'guardrails'} className="tab-pane">
         <AgentGuardrails name={name} visible={tab === 'guardrails'} />
       </div> : null}
-      {!embedded ? <div hidden={tab !== 'a2a'} className="tab-pane"><A2APanel name={name} /></div> : null}
+      {!embedded ? <div hidden={tab !== 'a2a'} className="tab-pane"><A2APanel name={name} visible={tab === 'a2a'} /></div> : null}
     </main>
   );
 }

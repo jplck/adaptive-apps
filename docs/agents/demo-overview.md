@@ -1,162 +1,77 @@
 # Radius agent demo: deployment, identity and guardrails
 
-**One agent, one retained identity, one policy, one explicit release.**
-Radius recipes create native Kubernetes resources; no agent lifecycle operator.
+**One mutable agent, one retained identity, separately retained state.**
+Radius recipes create native resources, not an agent lifecycle operator.
 
-## The four building blocks
+## Building blocks
 
-All types below belong to the existing `Radius.Resources` catalogue.
-Paths are relative to `radius/`.
+All types extend the existing `Radius.Resources` catalogue.
 
-| Resource | Declaration | Recipe / result |
+| Resource | Declaration | Result |
 | --- | --- | --- |
-| `agents` | [`agents.bicep`](../../radius/agents.bicep) | `recipes/agents/logical.bicep`: logical name, identity reference and active version |
-| `agentIdentities` | [`agent-identity.bicep`](../../radius/agent-identity.bicep) | `recipes/identity-local` or `identity-connected`: retained identity, Secret and ServiceAccount |
-| `agentGuardrails` | [`agent-policy.bicep`](../../radius/agent-policy.bicep) | `recipes/agent-guardrails/native-policy.bicep`: immutable policy ConfigMap |
-| `agentReleases` | [`agent-release.bicep`](../../radius/agent-release.bicep) | `recipes/agents/release.bicep`: immutable capture, StatefulSet, ingress and NetworkPolicy |
+| `agents` | [`agents.bicep`](../../radius/agents.bicep) | Current definition, singleton StatefulSet, stable Responses route and NetworkPolicy |
+| `agentIdentities` | [`agent-identity.bicep`](../../radius/agent-identity.bicep) | Separately retained Keycloak identity, Secret and ServiceAccount; optional Entra binding |
+| `agentGuardrails` | [`agent-policy.bicep`](../../radius/agent-policy.bicep) | Immutable policy ConfigMap explicitly attached through agent governance |
+| `aiModels` / `aiGateways` | [`agent-services.bicep`](../../radius/agent-services.bicep) | Backend connection facts / authenticated model routing, priorities and weights |
 
-## Deployment in six steps
+## Deployment
 
-Prerequisite: an existing native Radius environment with registered recipes,
-reachable digest-pinned images, Keycloak, model gateway and a configured model.
-This is an application demo, not a platform bootstrap or operator migration.
+Prerequisites: a fresh native Radius environment, registered recipes,
+digest-pinned images, Keycloak, and an authenticated model gateway.
+This is not an operator migration or an ownership-handover procedure.
 
-1. **Declare the agent** with `activeVersion=''`.
-2. **Provision its identity** separately; set the logical agent's `identityRef`
-   to the returned binding.
-3. **Publish a policy** with canonical content and its SHA-256 digest.
-4. **Deploy a new release**, for example `v1`, with an immutable image digest,
-   model, instructions and the exact identity and governance snapshots.
-5. **Qualify that exact release**: check readiness and authenticated invocation;
-   try both an allowed prompt and synthetic PII.
-6. **Promote explicitly** by setting the logical agent's `activeVersion` to `v1`,
-   preserving its identity reference.
+1. Publish canonical guardrail policy content and its SHA-256 digest.
+2. Deploy `agents.bicep` with `agentName`, `definition`, and explicit governance
+   inputs. It composes separately owned identity and mutable agent resources.
+   The integrated trading application uses the same composition in `app.bicep`.
+3. Wait for the singleton StatefulSet's current revision, retained state PVC,
+   and current-generation ingress/policy readiness.
+4. Invoke `/agents/{name}/responses` with an authorized bearer and `store: false`.
+   Check a benign prompt and synthetic PII through native ingress.
+5. Redeploy the definition or pinned image to update the same runtime.
+   There is no release selector, promotion step, or previous-release fallback.
 
 ```text
-agent ── identityRef ──> retained identity
-  └── activeVersion ──> immutable release
-                         ├── captured identity binding
-                         ├── captured policy + proxy configuration
-                         └── agent runtime ──> authenticated model gateway
+agent -> retained identity binding
+  -> mutable runtime -> authenticated model gateway -> model backend
+       -> retained state PVC
+       -> explicit governance sidecar / policy
 ```
 
-## One example, built up recipe by recipe
+Governance inputs are canonical proxy configuration and its digest, exact
+policy reference/content, and `enforce` or `audit` mode. Publishing policy alone
+does not attach it or prove runtime enforcement. Input detection does not
+provide output redaction or universal Foundry content-safety parity.
 
-**Illustrative Bicep excerpts only, not deployable files.** Each step extends
-the same `demo-writer` story. Extensions, application/environment fields and
-input declarations are omitted; identity, policy and release keep separate
-ownership in a real deployment. The environment selects the recipes.
+## UI demonstration
 
-### 1. Start with an agent
+Open **Agents** and select an agent. **Chat** shows native Responses and
+explicit guardrail denials; **Guardrails** shows configured policies and
+enforcement status; **Monitor** shows correlated traces and guardrail records.
+Embedded trading mode exposes Chat and Monitor, not independent administration
+or outage controls. A conversation caches discovery, not an immutable runtime.
 
-The logical recipe gives the agent a name, not a running workload.
+Standalone outage control changes only `demo-cloud-egress`; it must not restart
+workloads or rotate credentials. Kubernetes policies are additive: another
+allow policy can defeat the simulated outage. Established connections and
+cached tokens are not evidence of fresh cloud reachability.
 
-```bicep
-resource agent 'Radius.Resources/agents@2025-08-01-preview' = {
-  name: 'demo-writer'
-  properties: {
-    kind: 'prompt'
-    identityRef: ''
-    activeVersion: ''
-  }
-}
-```
+## Identity, Foundry and qualification boundaries
 
-### 2. Add its identity
+Local identity always uses Keycloak. Explicit connected provisioning adds Entra;
+cloud-only identity fails when Entra is unavailable. The same hosted OCI digest
+remains the portability objective, but the current local artifacts use a
+Keycloak token provider: native Foundry Entra authentication is not yet a
+qualified 1:1 execution path.
 
-The default local identity recipe creates a retained Keycloak identity.
-After provisioning, update the agent's `identityRef` to the returned binding.
+Strict body-aware Responses admission remains opt-in (`strictResponses`).
+Enable it explicitly for the bounded stateless contract; the SDK's persisted
+caller/state isolation has six known expected-failing contract tests.
 
-```bicep
-resource identity 'Radius.Resources/agentIdentities@2025-08-01-preview' = {
-  name: 'demo-writer'
-  properties: {
-    agentName: agent.name
-    agentResourceId: agent.id
-    agentUid: agent.properties.agentUid
-    delegation: { enabled: false }
-  }
-}
-```
+`recipes/foundry-agent/main.tf` retains native prompt and hosted Foundry
+provisioning with mutable updates and native identity outputs. Source tests are
+not live Foundry hosting, cloud A365 ingestion, CNI, GPU, or ownership-handover
+qualification. Identity and state remain independently retained; no automatic
+pruning, credential regeneration, or fallback is introduced.
 
-### 3. Add a guardrail
-
-The policy recipe publishes immutable rules: **deny detected PII, otherwise
-allow `local-chat`**. The inputs below stand for canonical policy JSON and its
-SHA-256; publishing alone does not enforce it.
-
-```bicep
-resource policy 'Radius.Resources/agentGuardrails@2025-08-01-preview' = {
-  name: 'demo-input-pii-v1'
-  properties: {
-    policyNamespace: 'adaptive-guardrails-apps'
-    policies: canonicalPolicy
-    policyDigest: policySha256
-  }
-}
-```
-
-### 4. Deploy the agent with that identity and guardrail
-
-The release recipe captures the identity and policy and creates the workload.
-Proxy inputs represent the prepared canonical configuration for this policy
-and model ingress, not hand-written placeholder hashes.
-
-```bicep
-resource release 'Radius.Resources/agentReleases@2025-08-01-preview' = {
-  name: 'demo-writer-v1'
-  properties: {
-    agentName: agent.name
-    agentUid: agent.properties.agentUid
-    version: 'v1'
-    definition: {
-      kind: 'prompt'
-      runtimeImage: runtimeImageDigest
-      model: 'local-chat'
-      instructions: 'Help draft clear, concise text.'
-      tools: []
-    }
-    binding: {
-      identity: identity.properties.identity
-      identityRef: identity.properties.identityRef
-      secretRef: identity.properties.secretRef
-      serviceAccountName: identity.properties.serviceAccountName
-    }
-    governance: {
-      reference: policy.properties.bundleRef
-      content: canonicalPolicy
-      config: canonicalProxyConfig
-      digest: proxyConfigSha256
-      mode: 'enforce'
-    }
-  }
-}
-```
-
-After qualifying `v1`, update the **logical agent** to
-`identityRef: identity.properties.identityRef` and `activeVersion: 'v1'`.
-For a change, publish `v2`; keep the identity and do not overwrite `v1`.
-
-## Show it in the UI
-
-Open **Agents**, select the exact release, then:
-
-| Tab | Demo |
-| --- | --- |
-| Chat | Send a benign request, then synthetic PII; confirm an explicit guardrail denial in enforce mode |
-| Guardrails | Show the policy attached to this release, its rules and enforcement state |
-| Monitor | Inspect the corresponding request records |
-
-## Boundaries worth mentioning
-
-- **Identity:** local uses Keycloak; connected provisioning can add Entra.
-  Cloud-only identity requires Entra and fails explicitly when unavailable.
-- **Guardrails:** publishing a policy does not attach it globally. Capture its
-  exact content/reference and canonical proxy configuration in the release.
-  PII protection covers model-bound input, not output redaction.
-- **Ownership:** identity and state are retained separately. Changes require a
-  new release; no automatic pruning, credential regeneration or release fallback.
-- **Traffic:** invocation uses native Responses ingress; model calls use the
-  authenticated gateway, never the diagnostics API.
-
-Full setup and qualification: [Native agents with Radius](native-radius.md).
+Full setup: [Native agents with Radius](native-radius.md).
